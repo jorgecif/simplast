@@ -507,9 +507,16 @@
 
     /* ── Mobile responsive ── */
     @media (max-width: 768px) {
-      body { overflow: hidden; }
+      /* Page scrolls naturally — avoids touch conflicts with range inputs */
+      body {
+        overflow-y: auto;
+        height: auto;
+      }
 
       header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
         height: 44px;
         padding: 0 12px;
       }
@@ -517,28 +524,44 @@
       .logo-badge, .header-subtitle { display: none; }
       .disclaimer-badge { font-size: 10px; padding: 3px 7px; }
 
-      main { flex-direction: column; }
-
-      aside {
-        width: 100%;
-        min-width: unset;
-        border-right: none;
-        border-top: 2px solid var(--border);
-        order: 2;
-        max-height: 48vh;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
+      main {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
       }
 
+      /* Canvas at top, fixed aspect area */
       .canvas-area {
         order: 1;
-        flex: 1;
-        min-height: 0;
+        min-height: 44vw;
+        max-height: 52vh;
+        flex: 0 0 auto;
         padding: 8px 8px 4px;
         gap: 6px;
+        overflow: hidden;
       }
 
-      /* Compact upload + camera row on mobile */
+      /* Controls flow below canvas, full height, no clipping */
+      aside {
+        order: 2;
+        width: 100%;
+        min-width: unset;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+        border-right: none;
+        border-top: 2px solid var(--border);
+      }
+
+      /* Sliders panel: no internal scroll, let page scroll */
+      .sliders-panel {
+        flex: none;
+        overflow: visible;
+        height: auto;
+        padding: 10px 10px 4px;
+      }
+
+      /* Compact upload row */
       .upload-zone {
         display: flex;
         align-items: center;
@@ -547,7 +570,7 @@
         padding: 10px 12px;
         margin: 10px 10px 0;
       }
-      .upload-zone .upload-icon { font-size: 24px; flex-shrink: 0; margin-bottom: 0; }
+      .upload-zone .upload-icon { font-size: 22px; flex-shrink: 0; margin-bottom: 0; }
       .upload-zone .upload-hint:last-of-type { display: none; }
       .upload-zone .upload-title { margin-bottom: 1px; }
 
@@ -561,32 +584,30 @@
       .status-bar { margin: 6px 10px 0; }
       .lm-toggle  { margin: 4px 10px 0; }
 
-      .proc-tabs {
-        padding: 8px 10px;
-        gap: 5px;
-      }
-
-      .proc-tab { padding: 7px 2px 6px; }
+      .proc-tabs { padding: 8px 10px; gap: 5px; }
+      .proc-tab  { padding: 7px 2px 6px; }
       .proc-tab-emoji { font-size: 18px; }
       .proc-tab-label { font-size: 9px; }
 
-      .sliders-panel { padding: 10px 10px 4px; }
       .slider-group  { margin-bottom: 14px; }
-
       .reset-btn { padding: 6px 0; }
 
       .reset-all-btn {
-        margin: 0 10px 10px;
+        margin: 0 10px 14px;
         width: calc(100% - 20px);
       }
 
-      .view-controls { gap: 4px; flex-wrap: wrap; justify-content: center; }
+      .view-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 5px;
+        padding-bottom: 4px;
+      }
       .view-btn   { font-size: 11px; padding: 6px 10px; }
       .export-btn { font-size: 11px; padding: 6px 10px; }
     }
 
     @media (max-width: 380px) {
-      .proc-tabs { grid-template-columns: repeat(3, 1fr); gap: 4px; }
       .proc-tab-label { font-size: 8px; }
     }
 
