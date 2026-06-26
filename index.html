@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SimPlast — Simulador de Cirugía Plástica Facial</title>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    :root {
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --blue-light: #dbeafe;
+      --blue-xlight: #eff6ff;
+      --surface: #f8fafc;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --green: #059669;
+      --green-light: #d1fae5;
+      --red: #dc2626;
+      --red-light: #fee2e2;
+      --amber-light: #fef3c7;
+      --amber: #92400e;
+      --sidebar-w: 310px;
+      --radius: 10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--surface);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--blue), #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .logo-badge {
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--blue-light);
+      color: var(--blue);
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .header-subtitle { font-size: 12px; color: var(--text-muted); }
+    .disclaimer-badge {
+      font-size: 11px;
+      color: var(--amber);
+      background: var(--amber-light);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+
+    /* ── Layout ── */
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: white;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Upload zone */
+    .upload-zone {
+      margin: 14px 14px 0;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 20px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s ease;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .upload-zone:hover, .upload-zone.drag {
+      border-color: var(--blue);
+      background: var(--blue-xlight);
+    }
+    .upload-zone .upload-icon { font-size: 28px; margin-bottom: 6px; }
+    .upload-zone .upload-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .upload-zone .upload-hint { font-size: 11px; color: var(--text-muted); }
+    .upload-zone .upload-hint b { color: var(--blue); }
+    #fileInput { display: none; }
+
+    /* Status */
+    .status-bar {
+      margin: 8px 14px 0;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+    .status-bar.loading { display: flex; background: var(--amber-light); color: var(--amber); }
+    .status-bar.success { display: flex; background: var(--green-light); color: var(--green); }
+    .status-bar.error   { display: flex; background: var(--red-light); color: var(--red); }
+
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Landmarks toggle */
+    .lm-toggle {
+      margin: 6px 14px 0;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .lm-toggle.visible { display: flex; }
+    .lm-toggle input { accent-color: var(--blue); cursor: pointer; }
+    .lm-toggle label { cursor: pointer; }
+
+    /* Procedure tabs */
+    .proc-tabs {
+      display: flex;
+      padding: 10px 14px 0;
+      gap: 4px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .proc-tabs::-webkit-scrollbar { display: none; }
+
+    .proc-tab {
+      padding: 5px 9px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: white;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--text-muted);
+      transition: all .15s ease;
+    }
+    .proc-tab:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-xlight); }
+    .proc-tab.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+    /* Sliders panel */
+    .sliders-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .sliders-panel.disabled { opacity: .35; pointer-events: none; }
+
+    .proc-section { display: none; }
+    .proc-section.active { display: block; }
+
+    .proc-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .proc-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .slider-group { margin-bottom: 18px; }
+    .slider-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .slider-label { font-size: 12px; color: var(--text-muted); }
+    .slider-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--blue);
+      min-width: 30px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      accent-color: var(--blue);
+      cursor: pointer;
+    }
+
+    .reset-btn {
+      width: 100%;
+      margin-top: 4px;
+      padding: 7px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .reset-btn:hover { background: var(--red-light); border-color: #fca5a5; color: var(--red); }
+
+    .cam-open-btn {
+      margin: 8px 14px 0;
+      width: calc(100% - 28px);
+      padding: 9px 0;
+      border: 1.5px solid var(--blue);
+      border-radius: var(--radius);
+      background: var(--blue-xlight);
+      color: var(--blue);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .cam-open-btn:hover { background: var(--blue); color: white; }
+
+    .reset-all-btn {
+      margin: 0 14px 14px;
+      width: calc(100% - 28px);
+      padding: 8px 0;
+      border: none;
+      border-radius: 8px;
+      background: #f1f5f9;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .reset-all-btn:hover { background: var(--red-light); color: var(--red); }
+
+    /* ── Camera modal ── */
+    .cam-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0,0,0,.75);
+      align-items: center;
+      justify-content: center;
+    }
+    .cam-modal.open { display: flex; }
+
+    .cam-box {
+      background: #0f172a;
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 640px;
+      width: calc(100vw - 32px);
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+    }
+
+    .cam-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .cam-header-title { color: white; font-size: 14px; font-weight: 600; }
+    .cam-close {
+      background: rgba(255,255,255,.1);
+      border: none;
+      color: white;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .cam-close:hover { background: rgba(255,255,255,.2); }
+
+    .cam-video-wrap {
+      position: relative;
+      width: 100%;
+      background: black;
+    }
+    #camVideo {
+      width: 100%;
+      display: block;
+      transform: scaleX(-1); /* mirror for selfie */
+    }
+    #camVideo.no-mirror { transform: none; }
+
+    .cam-overlay-msg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      text-align: center;
+      font-size: 13px;
+      pointer-events: none;
+    }
+    .cam-overlay-msg .spin-big {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    .cam-controls {
+      width: 100%;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: #0f172a;
+    }
+
+    .cam-flip-btn {
+      background: rgba(255,255,255,.1);
+      border: none;
+      color: white;
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 20px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .cam-flip-btn:hover { background: rgba(255,255,255,.2); }
+
+    .cam-capture-btn {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      border: 4px solid white;
+      background: white;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .12s, background .12s;
+      box-shadow: 0 0 0 4px rgba(255,255,255,.25);
+    }
+    .cam-capture-btn:hover { transform: scale(1.06); }
+    .cam-capture-btn:active { transform: scale(.95); background: #e2e8f0; }
+    .cam-capture-btn::after {
+      content: '';
+      width: 48px; height: 48px;
+      background: #1e293b;
+      border-radius: 50%;
+      transition: background .12s;
+    }
+    .cam-capture-btn:active::after { background: #475569; }
+
+    .cam-error {
+      padding: 20px;
+      color: #fca5a5;
+      font-size: 13px;
+      text-align: center;
+      display: none;
+    }
+    .cam-error.visible { display: block; }
+
+    /* Flash animation on capture */
+    @keyframes flash {
+      0%   { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .cam-flash {
+      position: absolute;
+      inset: 0;
+      background: white;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .cam-flash.go { animation: flash .25s ease-out forwards; }
+
+    /* ── Canvas area ── */
+    .canvas-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      gap: 14px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      pointer-events: none;
+    }
+    .placeholder-icon { font-size: 72px; opacity: .15; }
+    .placeholder-title { font-size: 16px; font-weight: 600; color: var(--text); opacity: .5; }
+    .placeholder-sub { font-size: 13px; opacity: .5; }
+
+    .canvas-wrapper {
+      display: none;
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
+    }
+
+    canvas { display: block; max-width: 100%; max-height: 100%; }
+
+    /* View controls */
+    .view-controls {
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    .view-controls.visible { display: flex; }
+
+    .view-btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .view-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .view-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+    .sep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
+
+    .export-btn {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: none;
+      background: #0f172a;
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: opacity .15s;
+    }
+    .export-btn:hover { opacity: .75; }
+
+    /* Loading overlay on canvas */
+    .canvas-loading {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .canvas-loading.visible { display: flex; }
+    .canvas-loading .spinner { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">SimPlast</div>
+    <div class="logo-badge">BETA</div>
+    <div class="header-subtitle">Simulador de procedimientos estéticos faciales</div>
+  </div>
+  <div class="disclaimer-badge">⚠️ Solo para uso profesional médico · No reemplaza evaluación clínica</div>
+</header>
+
+<main>
+  <!-- ── Sidebar ── -->
+  <aside>
+    <div class="upload-zone" id="uploadZone">
+      <div class="upload-icon">🖼️</div>
+      <div class="upload-title">Foto del paciente</div>
+      <div class="upload-hint">Arrastra aquí o <b>haz clic</b> para seleccionar</div>
+      <div class="upload-hint" style="margin-top:3px">JPG · PNG · Vista frontal, buena luz</div>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+    <button class="cam-open-btn" id="camOpenBtn" onclick="openCamera()">
+      📸 Tomar foto con cámara
+    </button>
+
+    <div class="status-bar" id="statusBar">
+      <div class="spinner" id="statusSpinner" style="display:none"></div>
+      <span id="statusText"></span>
+    </div>
+
+    <div class="lm-toggle" id="lmToggle">
+      <input type="checkbox" id="showLandmarks">
+      <label for="showLandmarks">Mostrar puntos faciales detectados</label>
+    </div>
+
+    <div class="proc-tabs" id="procTabs"></div>
+
+    <div class="sliders-panel disabled" id="slidersPanel"></div>
+
+    <button class="reset-all-btn" id="resetAllBtn" onclick="resetAll()">↺ Resetear todos los ajustes</button>
+  </aside>
+
+  <!-- ── Camera modal ── -->
+  <div class="cam-modal" id="camModal">
+    <div class="cam-box">
+      <div class="cam-header">
+        <span class="cam-header-title">📸 Capturar foto del paciente</span>
+        <button class="cam-close" onclick="closeCamera()" title="Cerrar">✕</button>
+      </div>
+
+      <div class="cam-video-wrap" id="camVideoWrap">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <div class="cam-flash" id="camFlash"></div>
+        <div class="cam-overlay-msg" id="camOverlayMsg">
+          <div class="spin-big"></div>
+          Iniciando cámara...
+        </div>
+      </div>
+
+      <div class="cam-error" id="camError">
+        <b>No se pudo acceder a la cámara.</b><br>
+        Verifica que el navegador tiene permiso para usar la cámara e intenta de nuevo.
+      </div>
+
+      <div class="cam-controls">
+        <button class="cam-flip-btn" id="camFlipBtn" onclick="flipCamera()" title="Cambiar cámara">🔄</button>
+        <button class="cam-capture-btn" id="camCaptureBtn" onclick="capturePhoto()" title="Capturar foto"></button>
+        <div style="width:42px"></div><!-- spacer to balance flip button -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Canvas area ── -->
+  <div class="canvas-area" id="canvasArea">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">🏥</div>
+      <div class="placeholder-title">Visualizador de resultados</div>
+      <div class="placeholder-sub">Sube una foto del paciente para comenzar</div>
+    </div>
+
+    <div class="canvas-wrapper" id="canvasWrapper">
+      <canvas id="mainCanvas"></canvas>
+      <div class="canvas-loading" id="canvasLoading">
+        <div class="spinner"></div>
+        Detectando rostro...
+      </div>
+    </div>
+
+    <div class="view-controls" id="viewControls">
+      <button class="view-btn active" id="btnAfter"  onclick="setView('after')">Resultado</button>
+      <button class="view-btn"        id="btnBefore" onclick="setView('before')">Original</button>
+      <button class="view-btn"        id="btnSplit"  onclick="setView('split')">Comparar ◑</button>
+      <div class="sep"></div>
+      <button class="export-btn" onclick="exportImage()">↓ Exportar PNG</button>
+    </div>
+  </div>
+</main>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// PROCEDURES DEFINITION
+// ════════════════════════════════════════════════════════════════
+// Face-api.js 68-landmark map:
+// 0-16  jaw line (left→right)
+// 17-21 left eyebrow, 22-26 right eyebrow
+// 27-30 nose bridge, 31-35 nose base/nostrils
+// 36-41 left eye, 42-47 right eye
+// 48-67 lips (48-59 outer, 60-67 inner)
+
+const PROCEDURES = {
+  rinoplastia: {
+    name: 'Rinoplastia',
+    emoji: '👃',
+    desc: 'Modifica la forma y proyección de la nariz.',
+    sliders: [
+      {
+        id: 'dorso', label: 'Reducción de dorso', min: -35, max: 10, defVal: 0,
+        controls: [
+          { idx: 27, dx: 0, dy: -0.4, sigma: 32 },
+          { idx: 28, dx: 0, dy: -1,   sigma: 38 },
+          { idx: 29, dx: 0, dy: -0.7, sigma: 34 },
+        ]
+      },
+      {
+        id: 'punta', label: 'Proyección de punta', min: -20, max: 25, defVal: 0,
+        controls: [
+          { idx: 30, dx: 0, dy: 1, sigma: 38 },
+          { idx: 33, dx: 0, dy: 0.7, sigma: 32 },
+        ]
+      },
+      {
+        id: 'ancho', label: 'Ancho de aletas', min: -20, max: 10, defVal: 0,
+        controls: [
+          { idx: 31, dx: 1,  dy: 0, sigma: 28 },
+          { idx: 35, dx: -1, dy: 0, sigma: 28 },
+          { idx: 32, dx: 0.5,  dy: 0, sigma: 22 },
+          { idx: 34, dx: -0.5, dy: 0, sigma: 22 },
+        ]
+      },
+      {
+        id: 'angulo', label: 'Ángulo naso-labial', min: -20, max: 20, defVal: 0,
+        controls: [
+          { idx: 33, dx: 0, dy: 1, sigma: 22 },
+          { idx: 32, dx: 0, dy: 0.6, sigma: 18 },
+          { idx: 34, dx: 0, dy: 0.6, sigma: 18 },
+        ]
+      },
+    ]
+  },
+
+  mentoplastia: {
+    name: 'Mentoplastia',
+    emoji: '🫦',
+    desc: 'Ajusta la proyección y el ancho del mentón.',
+    sliders: [
+      {
+        id: 'proyeccion', label: 'Proyección del mentón', min: -15, max: 25, defVal: 0,
+        controls: [
+          { idx: 8, dx: 0, dy: 1,   sigma: 52 },
+          { idx: 7, dx: 0, dy: 0.7, sigma: 40 },
+          { idx: 9, dx: 0, dy: 0.7, sigma: 40 },
+        ]
+      },
+      {
+        id: 'ancho', label: 'Ancho del mentón', min: -15, max: 20, defVal: 0,
+        controls: [
+          { idx: 7,  dx: -0.6, dy: 0, sigma: 38 },
+          { idx: 9,  dx:  0.6, dy: 0, sigma: 38 },
+          { idx: 6,  dx: -0.4, dy: 0, sigma: 32 },
+          { idx: 10, dx:  0.4, dy: 0, sigma: 32 },
+        ]
+      },
+    ]
+  },
+
+  otoplastia: {
+    name: 'Otoplastia',
+    emoji: '👂',
+    desc: 'Corrige la posición y tamaño de las orejas.',
+    sliders: [
+      {
+        id: 'rotacion', label: 'Rotación / acercamiento', min: -25, max: 5, defVal: 0,
+        controls: [
+          { idx: 0,  dx:  1,   dy: 0, sigma: 50 },
+          { idx: 16, dx: -1,   dy: 0, sigma: 50 },
+          { idx: 1,  dx:  0.6, dy: 0, sigma: 40 },
+          { idx: 15, dx: -0.6, dy: 0, sigma: 40 },
+          { idx: 2,  dx:  0.3, dy: 0, sigma: 30 },
+          { idx: 14, dx: -0.3, dy: 0, sigma: 30 },
+        ]
+      },
+      {
+        id: 'tamano', label: 'Reducción de tamaño', min: -20, max: 10, defVal: 0,
+        controls: [
+          { idx: 0,  dx:  0.6, dy:  0.4, sigma: 45 },
+          { idx: 16, dx: -0.6, dy:  0.4, sigma: 45 },
+        ]
+      },
+    ]
+  },
+
+  botox: {
+    name: 'Bótox / Rellenos',
+    emoji: '💉',
+    desc: 'Simula volumen en labios, pómulos y comisuras.',
+    sliders: [
+      {
+        id: 'labios', label: 'Volumen de labios', min: 0, max: 30, defVal: 0,
+        controls: [
+          { idx: 51, dx: 0, dy: -1,   sigma: 28 },
+          { idx: 57, dx: 0, dy:  1,   sigma: 28 },
+          { idx: 50, dx: 0, dy: -0.7, sigma: 22 },
+          { idx: 52, dx: 0, dy: -0.7, sigma: 22 },
+          { idx: 56, dx: 0, dy:  0.7, sigma: 22 },
+          { idx: 58, dx: 0, dy:  0.7, sigma: 22 },
+        ]
+      },
+      {
+        id: 'pomulos', label: 'Relleno de pómulos', min: 0, max: 25, defVal: 0,
+        controls: [
+          { idx: 1,  dx: -0.4, dy: -1,   sigma: 58 },
+          { idx: 15, dx:  0.4, dy: -1,   sigma: 58 },
+          { idx: 2,  dx: -0.6, dy: -0.8, sigma: 50 },
+          { idx: 14, dx:  0.6, dy: -0.8, sigma: 50 },
+        ]
+      },
+      {
+        id: 'comisuras', label: 'Elevación de comisuras', min: -15, max: 15, defVal: 0,
+        controls: [
+          { idx: 48, dx: -0.4, dy: -1, sigma: 22 },
+          { idx: 54, dx:  0.4, dy: -1, sigma: 22 },
+        ]
+      },
+    ]
+  },
+
+  papada: {
+    name: 'Papada',
+    emoji: '✂️',
+    desc: 'Simula reducción de grasa submentoniana y definición de perfil.',
+    sliders: [
+      {
+        id: 'reduccion', label: 'Reducción de papada', min: 0, max: 45, defVal: 0,
+        controls: [
+          { idx: 8, dx: 0, dy: -0.4, sigma: 70 },
+          { idx: 7, dx: 0, dy: -0.3, sigma: 58 },
+          { idx: 9, dx: 0, dy: -0.3, sigma: 58 },
+          { idx: 6, dx: 0, dy: -0.2, sigma: 48 },
+          { idx: 10, dx: 0, dy: -0.2, sigma: 48 },
+          // sub-chin synthetic points added at indices after landmarks
+          { idx: 'sub0', dx: 0, dy: -0.8, sigma: 55 },
+          { idx: 'sub1', dx: 0, dy: -0.6, sigma: 45 },
+        ]
+      },
+      {
+        id: 'perfil', label: 'Definición de perfil', min: 0, max: 25, defVal: 0,
+        controls: [
+          { idx: 5,  dx:  0.5, dy: -0.4, sigma: 48 },
+          { idx: 11, dx: -0.5, dy: -0.4, sigma: 48 },
+          { idx: 6,  dx:  0.3, dy: -0.2, sigma: 40 },
+          { idx: 10, dx: -0.3, dy: -0.2, sigma: 40 },
+        ]
+      },
+    ]
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════════
+
+const state = {
+  modelsLoaded: false,
+  srcCanvas: null,       // offscreen canvas with scaled original
+  landmarks: null,       // [{x,y}] × 68
+  subChinPts: null,      // synthetic sub-chin points [{x,y}] with their keys
+  allPoints: null,       // landmarks + subChinPts + borderPts combined
+  subChinOffset: 0,      // index in allPoints where sub-chin points start
+  triangles: null,       // [[i,j,k]]
+  sliders: {},
+  currentView: 'after',
+  renderTimer: null,
+  showLandmarks: false,
+};
+
+// Init slider values
+for (const [pid, proc] of Object.entries(PROCEDURES)) {
+  state.sliders[pid] = {};
+  for (const s of proc.sliders) state.sliders[pid][s.id] = s.defVal;
+}
+
+const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+const RENDER_DELAY = 55; // ms debounce
+
+// ════════════════════════════════════════════════════════════════
+// DOM HELPERS
+// ════════════════════════════════════════════════════════════════
+
+const $  = id => document.getElementById(id);
+const uploadZone    = $('uploadZone');
+const fileInput     = $('fileInput');
+const statusBar     = $('statusBar');
+const statusSpinner = $('statusSpinner');
+const statusText    = $('statusText');
+const procTabs      = $('procTabs');
+const slidersPanel  = $('slidersPanel');
+const canvasWrapper = $('canvasWrapper');
+const placeholder   = $('placeholder');
+const mainCanvas    = $('mainCanvas');
+const viewControls  = $('viewControls');
+const canvasLoading = $('canvasLoading');
+const lmToggle      = $('lmToggle');
+const showLandmarksChk = $('showLandmarks');
+const ctx = mainCanvas.getContext('2d');
+
+let activeProcId = Object.keys(PROCEDURES)[0];
+
+// ════════════════════════════════════════════════════════════════
+// STATUS
+// ════════════════════════════════════════════════════════════════
+
+function setStatus(type, text) {
+  statusBar.className = 'status-bar ' + type;
+  statusSpinner.style.display = type === 'loading' ? 'block' : 'none';
+  statusText.textContent = text;
+}
+
+// ════════════════════════════════════════════════════════════════
+// BUILD UI
+// ════════════════════════════════════════════════════════════════
+
+function buildUI() {
+  // Tabs
+  procTabs.innerHTML = '';
+  Object.entries(PROCEDURES).forEach(([pid, proc]) => {
+    const btn = document.createElement('button');
+    btn.className = 'proc-tab' + (pid === activeProcId ? ' active' : '');
+    btn.textContent = proc.emoji + ' ' + proc.name;
+    btn.onclick = () => switchProc(pid);
+    procTabs.appendChild(btn);
+  });
+
+  // Panels
+  slidersPanel.innerHTML = '';
+  Object.entries(PROCEDURES).forEach(([pid, proc]) => {
+    const section = document.createElement('div');
+    section.className = 'proc-section' + (pid === activeProcId ? ' active' : '');
+    section.id = 'psec-' + pid;
+
+    const title = document.createElement('div');
+    title.className = 'proc-section-title';
+    title.textContent = proc.emoji + '  ' + proc.name;
+    section.appendChild(title);
+
+    if (proc.desc) {
+      const desc = document.createElement('div');
+      desc.className = 'proc-desc';
+      desc.textContent = proc.desc;
+      section.appendChild(desc);
+    }
+
+    proc.sliders.forEach(sl => {
+      const group = document.createElement('div');
+      group.className = 'slider-group';
+
+      const row = document.createElement('div');
+      row.className = 'slider-row';
+
+      const lbl = document.createElement('span');
+      lbl.className = 'slider-label';
+      lbl.textContent = sl.label;
+
+      const valSpan = document.createElement('span');
+      valSpan.className = 'slider-value';
+      valSpan.id = `val-${pid}-${sl.id}`;
+      valSpan.textContent = sl.defVal;
+
+      row.appendChild(lbl);
+      row.appendChild(valSpan);
+
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = sl.min;
+      input.max = sl.max;
+      input.step = 1;
+      input.value = sl.defVal;
+      input.id = `sl-${pid}-${sl.id}`;
+      input.oninput = () => {
+        const v = parseInt(input.value);
+        state.sliders[pid][sl.id] = v;
+        valSpan.textContent = v > 0 ? '+' + v : String(v);
+        scheduleRender();
+      };
+
+      group.appendChild(row);
+      group.appendChild(input);
+      section.appendChild(group);
+    });
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'reset-btn';
+    resetBtn.textContent = '↺ Resetear ' + proc.name;
+    resetBtn.onclick = () => resetProc(pid);
+    section.appendChild(resetBtn);
+
+    slidersPanel.appendChild(section);
+  });
+}
+
+function switchProc(pid) {
+  activeProcId = pid;
+  procTabs.querySelectorAll('.proc-tab').forEach((t, i) => {
+    t.classList.toggle('active', Object.keys(PROCEDURES)[i] === pid);
+  });
+  slidersPanel.querySelectorAll('.proc-section').forEach(s => {
+    s.classList.toggle('active', s.id === 'psec-' + pid);
+  });
+}
+
+function resetProc(pid) {
+  for (const sl of PROCEDURES[pid].sliders) {
+    state.sliders[pid][sl.id] = sl.defVal;
+    const inp = $(`sl-${pid}-${sl.id}`);
+    const val = $(`val-${pid}-${sl.id}`);
+    if (inp) inp.value = sl.defVal;
+    if (val) val.textContent = sl.defVal;
+  }
+  scheduleRender();
+}
+
+function resetAll() {
+  for (const pid of Object.keys(PROCEDURES)) resetProc(pid);
+}
+
+// ════════════════════════════════════════════════════════════════
+// FILE UPLOAD
+// ════════════════════════════════════════════════════════════════
+
+uploadZone.onclick = () => fileInput.click();
+uploadZone.ondragover = e => { e.preventDefault(); uploadZone.classList.add('drag'); };
+uploadZone.ondragleave = () => uploadZone.classList.remove('drag');
+uploadZone.ondrop = e => {
+  e.preventDefault(); uploadZone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+};
+fileInput.onchange = () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); };
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); processImage(img); };
+  img.src = url;
+}
+
+// ════════════════════════════════════════════════════════════════
+// IMAGE PROCESSING & FACE DETECTION
+// ════════════════════════════════════════════════════════════════
+
+async function processImage(img) {
+  if (!state.modelsLoaded) {
+    setStatus('error', 'Modelos aún cargando, espera un momento...');
+    return;
+  }
+
+  // Show canvas area
+  placeholder.style.display = 'none';
+  canvasWrapper.style.display = 'block';
+  canvasLoading.classList.add('visible');
+  viewControls.classList.remove('visible');
+  lmToggle.classList.remove('visible');
+
+  // Fit to available space
+  const areaEl = $('canvasArea');
+  const maxW = areaEl.clientWidth - 40;
+  const maxH = areaEl.clientHeight - 80;
+  const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+  const W = Math.round(img.naturalWidth * scale);
+  const H = Math.round(img.naturalHeight * scale);
+
+  mainCanvas.width = W;
+  mainCanvas.height = H;
+
+  // Draw scaled image to offscreen
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  off.getContext('2d').drawImage(img, 0, 0, W, H);
+  state.srcCanvas = off;
+
+  // Detect face
+  let detections;
+  try {
+    detections = await faceapi
+      .detectAllFaces(off, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.35 }))
+      .withFaceLandmarks();
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'Error en detección. Intenta con otra foto.');
+    canvasLoading.classList.remove('visible');
+    ctx.drawImage(off, 0, 0);
+    return;
+  }
+
+  canvasLoading.classList.remove('visible');
+
+  if (!detections || detections.length === 0) {
+    setStatus('error', 'No se detectó un rostro. Usa foto frontal con buena iluminación.');
+    ctx.drawImage(off, 0, 0);
+    return;
+  }
+
+  const msg = detections.length > 1
+    ? `${detections.length} rostros detectados · Usando el primero`
+    : 'Rostro detectado correctamente · Ajusta los controles';
+  setStatus('success', msg);
+
+  state.landmarks = detections[0].landmarks.positions.map(p => ({ x: p.x, y: p.y }));
+
+  buildMesh(W, H);
+
+  slidersPanel.classList.remove('disabled');
+  viewControls.classList.add('visible');
+  lmToggle.classList.add('visible');
+  state.currentView = 'after';
+  syncViewButtons();
+  renderAfter();
+}
+
+// ════════════════════════════════════════════════════════════════
+// MESH BUILDING
+// ════════════════════════════════════════════════════════════════
+
+function buildMesh(W, H) {
+  const lm = state.landmarks;
+  const chin = lm[8];
+
+  // Sub-chin synthetic points for papada effect
+  const subChin = [
+    { key: 'sub0', x: chin.x, y: Math.min(H - 1, chin.y + 35) },
+    { key: 'sub1', x: chin.x, y: Math.min(H - 1, chin.y + 70) },
+    { key: 'sub2', x: chin.x - 50, y: Math.min(H - 1, chin.y + 50) },
+    { key: 'sub3', x: chin.x + 50, y: Math.min(H - 1, chin.y + 50) },
+  ].filter(p => p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H);
+
+  state.subChinPts = subChin;
+  state.subChinOffset = lm.length; // sub-chin starts after 68 landmarks
+
+  const borderPts = [
+    { x: 0,   y: 0   }, { x: W/2, y: 0   }, { x: W,   y: 0   },
+    { x: W,   y: H/2 }, { x: W,   y: H   },
+    { x: W/2, y: H   }, { x: 0,   y: H   }, { x: 0,   y: H/2 },
+    { x: W/4, y: 0   }, { x: 3*W/4, y: 0 },
+    { x: W,   y: H/4 }, { x: W, y: 3*H/4 },
+    { x: 3*W/4, y: H }, { x: W/4, y: H   },
+    { x: 0, y: H/4   }, { x: 0, y: 3*H/4 },
+  ];
+
+  state.allPoints = [
+    ...lm,
+    ...subChin.map(p => ({ x: p.x, y: p.y })),
+    ...borderPts,
+  ];
+
+  state.triangles = bowyerWatson(state.allPoints);
+}
+
+// ════════════════════════════════════════════════════════════════
+// BOWYER-WATSON DELAUNAY TRIANGULATION
+// ════════════════════════════════════════════════════════════════
+
+function bowyerWatson(points) {
+  const n = points.length;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  const span = Math.max(maxX - minX, maxY - minY) * 3;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+  const sA = n,   pA = { x: cx - span * 10, y: cy - span };
+  const sB = n+1, pB = { x: cx,              y: cy + span * 10 };
+  const sC = n+2, pC = { x: cx + span * 10,  y: cy - span };
+  const pts = [...points, pA, pB, pC];
+
+  let tris = [{ a: sA, b: sB, c: sC }];
+
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const bad = tris.filter(t => inCircumcircle(pts[t.a], pts[t.b], pts[t.c], p));
+
+    const polygon = [];
+    for (const bt of bad) {
+      const edges = [[bt.a, bt.b], [bt.b, bt.c], [bt.c, bt.a]];
+      for (const e of edges) {
+        const shared = bad.some(o => o !== bt && triHasEdge(o, e[0], e[1]));
+        if (!shared) polygon.push(e);
+      }
+    }
+
+    tris = tris.filter(t => !bad.includes(t));
+    for (const e of polygon) tris.push({ a: e[0], b: e[1], c: i });
+  }
+
+  // Remove super-triangle vertices
+  return tris
+    .filter(t => t.a < n && t.b < n && t.c < n)
+    .map(t => [t.a, t.b, t.c]);
+}
+
+function inCircumcircle(a, b, c, p) {
+  const ax = a.x - p.x, ay = a.y - p.y;
+  const bx = b.x - p.x, by = b.y - p.y;
+  const cx = c.x - p.x, cy = c.y - p.y;
+  return (ax*ax + ay*ay) * (bx*cy - by*cx)
+       - (bx*bx + by*by) * (ax*cy - ay*cx)
+       + (cx*cx + cy*cy) * (ax*by - ay*bx) > 0;
+}
+
+function triHasEdge(t, a, b) {
+  return (t.a===a&&t.b===b)||(t.b===a&&t.c===b)||(t.c===a&&t.a===b)
+       ||(t.a===b&&t.b===a)||(t.b===b&&t.c===a)||(t.c===b&&t.a===a);
+}
+
+// ════════════════════════════════════════════════════════════════
+// DISPLACEMENT COMPUTATION
+// ════════════════════════════════════════════════════════════════
+
+function computeDisplacements() {
+  const pts = state.allPoints;
+  const n = pts.length;
+  const disp = Array.from({ length: n }, () => ({ x: 0, y: 0 }));
+
+  for (const [pid, proc] of Object.entries(PROCEDURES)) {
+    for (const sl of proc.sliders) {
+      const value = state.sliders[pid][sl.id];
+      if (value === 0) continue;
+
+      for (const ctrl of sl.controls) {
+        // Resolve control point position
+        let srcPt;
+        if (typeof ctrl.idx === 'string') {
+          // synthetic sub-chin point
+          const found = state.subChinPts.find(p => p.key === ctrl.idx);
+          if (!found) continue;
+          srcPt = found;
+        } else {
+          if (ctrl.idx >= state.landmarks.length) continue;
+          srcPt = state.landmarks[ctrl.idx];
+        }
+
+        const sigma2 = ctrl.sigma * ctrl.sigma * 2;
+        for (let i = 0; i < n; i++) {
+          const ddx = pts[i].x - srcPt.x;
+          const ddy = pts[i].y - srcPt.y;
+          const w = Math.exp(-(ddx*ddx + ddy*ddy) / sigma2);
+          disp[i].x += ctrl.dx * value * w;
+          disp[i].y += ctrl.dy * value * w;
+        }
+      }
+    }
+  }
+
+  return disp;
+}
+
+// ════════════════════════════════════════════════════════════════
+// RENDERING
+// ════════════════════════════════════════════════════════════════
+
+function scheduleRender() {
+  if (state.renderTimer) clearTimeout(state.renderTimer);
+  state.renderTimer = setTimeout(() => {
+    if (state.currentView !== 'before') renderAfter();
+  }, RENDER_DELAY);
+}
+
+function renderAfter() {
+  if (!state.landmarks) return;
+
+  const disp = computeDisplacements();
+  const src = state.allPoints;
+  const dst = src.map((p, i) => ({ x: p.x + disp[i].x, y: p.y + disp[i].y }));
+
+  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+  if (state.currentView === 'split') {
+    const mid = mainCanvas.width / 2;
+
+    // Left: original
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, mid, mainCanvas.height); ctx.clip();
+    ctx.drawImage(state.srcCanvas, 0, 0);
+    ctx.restore();
+
+    // Right: warped
+    ctx.save();
+    ctx.beginPath(); ctx.rect(mid, 0, mid, mainCanvas.height); ctx.clip();
+    warpMesh(src, dst);
+    ctx.restore();
+
+    // Divider
+    ctx.save();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    ctx.shadowColor = 'rgba(0,0,0,.4)';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(mid, 0); ctx.lineTo(mid, mainCanvas.height);
+    ctx.stroke();
+    ctx.restore();
+
+    // Labels
+    drawLabel(ctx, 'Original',  14, 12);
+    drawLabel(ctx, 'Resultado', mid + 14, 12);
+  } else {
+    warpMesh(src, dst);
+  }
+
+  if (state.showLandmarks) overlayLandmarks();
+}
+
+function drawLabel(ctx, text, x, y) {
+  ctx.save();
+  ctx.font = '600 11px -apple-system, sans-serif';
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.beginPath();
+  ctx.roundRect(x - 5, y, w + 10, 20, 4);
+  ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.fillText(text, x, y + 14);
+  ctx.restore();
+}
+
+function renderBefore() {
+  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+  ctx.drawImage(state.srcCanvas, 0, 0);
+  if (state.showLandmarks) overlayLandmarks();
+}
+
+function warpMesh(srcPts, dstPts) {
+  for (const [ai, bi, ci] of state.triangles) {
+    drawWarpedTri(
+      srcPts[ai], srcPts[bi], srcPts[ci],
+      dstPts[ai], dstPts[bi], dstPts[ci]
+    );
+  }
+}
+
+function drawWarpedTri(sA, sB, sC, dA, dB, dC) {
+  const M = affineTransform([sA, sB, sC], [dA, dB, dC]);
+  if (!M) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(dA.x, dA.y);
+  ctx.lineTo(dB.x, dB.y);
+  ctx.lineTo(dC.x, dC.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.setTransform(M[0], M[1], M[2], M[3], M[4], M[5]);
+  ctx.drawImage(state.srcCanvas, 0, 0);
+  ctx.restore();
+}
+
+// Compute canvas affine transform: source triangle → destination triangle
+// Canvas setTransform(a,b,c,d,e,f):
+//   canvas_x = a*img_x + c*img_y + e
+//   canvas_y = b*img_x + d*img_y + f
+function affineTransform(src, dst) {
+  const [s0, s1, s2] = src;
+  const [d0, d1, d2] = dst;
+  const A = [[s0.x, s0.y, 1], [s1.x, s1.y, 1], [s2.x, s2.y, 1]];
+  const xc = solve3(A, [d0.x, d1.x, d2.x]);
+  const yc = solve3(A, [d0.y, d1.y, d2.y]);
+  if (!xc || !yc) return null;
+  return [xc[0], yc[0], xc[1], yc[1], xc[2], yc[2]];
+}
+
+function solve3(A, b) {
+  // Gaussian elimination with partial pivoting
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < 3; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < 3; r++)
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    if (Math.abs(M[col][col]) < 1e-10) return null;
+    for (let r = col + 1; r < 3; r++) {
+      const f = M[r][col] / M[col][col];
+      for (let j = col; j <= 3; j++) M[r][j] -= f * M[col][j];
+    }
+  }
+  const x = [0, 0, 0];
+  for (let i = 2; i >= 0; i--) {
+    x[i] = M[i][3];
+    for (let j = i + 1; j < 3; j++) x[i] -= M[i][j] * x[j];
+    x[i] /= M[i][i];
+  }
+  return x;
+}
+
+function overlayLandmarks() {
+  if (!state.landmarks) return;
+  ctx.save();
+  state.landmarks.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(37,99,235,0.85)';
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════════
+// VIEW CONTROLS
+// ════════════════════════════════════════════════════════════════
+
+function setView(v) {
+  state.currentView = v;
+  syncViewButtons();
+  if (v === 'before') renderBefore(); else renderAfter();
+}
+
+function syncViewButtons() {
+  $('btnAfter').classList.toggle('active',  state.currentView === 'after');
+  $('btnBefore').classList.toggle('active', state.currentView === 'before');
+  $('btnSplit').classList.toggle('active',  state.currentView === 'split');
+}
+
+showLandmarksChk.onchange = () => {
+  state.showLandmarks = showLandmarksChk.checked;
+  if (state.currentView === 'before') renderBefore(); else renderAfter();
+};
+
+function exportImage() {
+  const link = document.createElement('a');
+  link.download = 'simplast-simulacion.png';
+  link.href = mainCanvas.toDataURL('image/png');
+  link.click();
+}
+
+// ════════════════════════════════════════════════════════════════
+// MODEL LOADING
+// ════════════════════════════════════════════════════════════════
+
+async function loadModels() {
+  setStatus('loading', 'Cargando modelos de detección facial...');
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+    ]);
+    state.modelsLoaded = true;
+    setStatus('success', 'Listo · Sube una foto del paciente para comenzar');
+    setTimeout(() => { statusBar.style.display = 'none'; }, 4000);
+  } catch (e) {
+    console.error(e);
+    setStatus('error', 'Error cargando modelos. Sirve desde servidor local: python -m http.server');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CAMERA
+// ════════════════════════════════════════════════════════════════
+
+const camModal    = $('camModal');
+const camVideo    = $('camVideo');
+const camOverlay  = $('camOverlayMsg');
+const camErrorEl  = $('camError');
+const camFlash    = $('camFlash');
+const camCapBtn   = $('camCaptureBtn');
+
+let camStream = null;
+let facingMode = 'user'; // 'user' = front, 'environment' = back
+
+async function openCamera() {
+  camModal.classList.add('open');
+  camErrorEl.classList.remove('visible');
+  camOverlay.style.display = 'flex';
+  camCapBtn.disabled = true;
+  await startStream();
+}
+
+async function startStream() {
+  // Stop any existing stream
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+
+  const constraints = {
+    video: {
+      facingMode,
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    },
+    audio: false,
+  };
+
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia(constraints);
+    camVideo.srcObject = camStream;
+    // Mirror only for front camera
+    camVideo.classList.toggle('no-mirror', facingMode === 'environment');
+    camVideo.onloadedmetadata = () => {
+      camOverlay.style.display = 'none';
+      camCapBtn.disabled = false;
+    };
+  } catch (err) {
+    console.error('Camera error:', err);
+    camOverlay.style.display = 'none';
+    camErrorEl.classList.add('visible');
+  }
+}
+
+function closeCamera() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  camModal.classList.remove('open');
+  camVideo.srcObject = null;
+}
+
+async function flipCamera() {
+  facingMode = facingMode === 'user' ? 'environment' : 'user';
+  camOverlay.style.display = 'flex';
+  camCapBtn.disabled = true;
+  await startStream();
+}
+
+function capturePhoto() {
+  if (!camStream) return;
+
+  // Flash effect
+  camFlash.classList.remove('go');
+  void camFlash.offsetWidth; // reflow
+  camFlash.classList.add('go');
+
+  // Draw current video frame to offscreen canvas
+  const vw = camVideo.videoWidth;
+  const vh = camVideo.videoHeight;
+  const snap = document.createElement('canvas');
+  snap.width = vw;
+  snap.height = vh;
+  const sCtx = snap.getContext('2d');
+
+  // Mirror front camera to match natural orientation
+  if (facingMode === 'user') {
+    sCtx.translate(vw, 0);
+    sCtx.scale(-1, 1);
+  }
+  sCtx.drawImage(camVideo, 0, 0, vw, vh);
+
+  // Convert to image and process
+  const img = new Image();
+  img.onload = () => {
+    closeCamera();
+    processImage(img);
+  };
+  img.src = snap.toDataURL('image/jpeg', 0.92);
+}
+
+// Close modal on backdrop click
+camModal.addEventListener('click', e => { if (e.target === camModal) closeCamera(); });
+
+// Close on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && camModal.classList.contains('open')) closeCamera(); });
+
+// ════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════
+
+buildUI();
+loadModels();
+</script>
+</body>
+</html>
