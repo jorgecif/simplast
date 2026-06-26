@@ -158,33 +158,38 @@
     .lm-toggle input { accent-color: var(--blue); cursor: pointer; }
     .lm-toggle label { cursor: pointer; }
 
-    /* Procedure tabs */
+    /* Procedure tabs — always visible grid */
     .proc-tabs {
-      display: flex;
-      padding: 10px 14px 0;
-      gap: 4px;
-      overflow-x: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      padding: 10px 14px;
+      gap: 6px;
       flex-shrink: 0;
-      scrollbar-width: none;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
     }
-    .proc-tabs::-webkit-scrollbar { display: none; }
 
     .proc-tab {
-      padding: 5px 9px;
-      border-radius: 7px;
-      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 4px 7px;
+      border-radius: 9px;
+      border: 1.5px solid var(--border);
       background: white;
       cursor: pointer;
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-      color: var(--text-muted);
       transition: all .15s ease;
+      color: var(--text-muted);
     }
     .proc-tab:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-xlight); }
-    .proc-tab.active { background: var(--blue); color: white; border-color: var(--blue); }
+    .proc-tab.active {
+      background: var(--blue);
+      color: white;
+      border-color: var(--blue);
+      box-shadow: 0 2px 8px rgba(37,99,235,.3);
+    }
+    .proc-tab-emoji { font-size: 20px; line-height: 1; }
+    .proc-tab-label { font-size: 10px; font-weight: 600; text-align: center; line-height: 1.2; }
 
     /* Sliders panel */
     .sliders-panel {
@@ -499,6 +504,91 @@
       transition: opacity .15s;
     }
     .export-btn:hover { opacity: .75; }
+
+    /* ── Mobile responsive ── */
+    @media (max-width: 768px) {
+      body { overflow: hidden; }
+
+      header {
+        height: 44px;
+        padding: 0 12px;
+      }
+      .logo { font-size: 17px; }
+      .logo-badge, .header-subtitle { display: none; }
+      .disclaimer-badge { font-size: 10px; padding: 3px 7px; }
+
+      main { flex-direction: column; }
+
+      aside {
+        width: 100%;
+        min-width: unset;
+        border-right: none;
+        border-top: 2px solid var(--border);
+        order: 2;
+        max-height: 48vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .canvas-area {
+        order: 1;
+        flex: 1;
+        min-height: 0;
+        padding: 8px 8px 4px;
+        gap: 6px;
+      }
+
+      /* Compact upload + camera row on mobile */
+      .upload-zone {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        padding: 10px 12px;
+        margin: 10px 10px 0;
+      }
+      .upload-zone .upload-icon { font-size: 24px; flex-shrink: 0; margin-bottom: 0; }
+      .upload-zone .upload-hint:last-of-type { display: none; }
+      .upload-zone .upload-title { margin-bottom: 1px; }
+
+      .cam-open-btn {
+        margin: 6px 10px 0;
+        width: calc(100% - 20px);
+        padding: 8px 0;
+        font-size: 12px;
+      }
+
+      .status-bar { margin: 6px 10px 0; }
+      .lm-toggle  { margin: 4px 10px 0; }
+
+      .proc-tabs {
+        padding: 8px 10px;
+        gap: 5px;
+      }
+
+      .proc-tab { padding: 7px 2px 6px; }
+      .proc-tab-emoji { font-size: 18px; }
+      .proc-tab-label { font-size: 9px; }
+
+      .sliders-panel { padding: 10px 10px 4px; }
+      .slider-group  { margin-bottom: 14px; }
+
+      .reset-btn { padding: 6px 0; }
+
+      .reset-all-btn {
+        margin: 0 10px 10px;
+        width: calc(100% - 20px);
+      }
+
+      .view-controls { gap: 4px; flex-wrap: wrap; justify-content: center; }
+      .view-btn   { font-size: 11px; padding: 6px 10px; }
+      .export-btn { font-size: 11px; padding: 6px 10px; }
+    }
+
+    @media (max-width: 380px) {
+      .proc-tabs { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+      .proc-tab-label { font-size: 8px; }
+    }
 
     /* Loading overlay on canvas */
     .canvas-loading {
@@ -850,12 +940,12 @@ function setStatus(type, text) {
 // ════════════════════════════════════════════════════════════════
 
 function buildUI() {
-  // Tabs
+  // Tabs — grid cards with emoji + name
   procTabs.innerHTML = '';
   Object.entries(PROCEDURES).forEach(([pid, proc]) => {
     const btn = document.createElement('button');
     btn.className = 'proc-tab' + (pid === activeProcId ? ' active' : '');
-    btn.textContent = proc.emoji + ' ' + proc.name;
+    btn.innerHTML = `<span class="proc-tab-emoji">${proc.emoji}</span><span class="proc-tab-label">${proc.name}</span>`;
     btn.onclick = () => switchProc(pid);
     procTabs.appendChild(btn);
   });
