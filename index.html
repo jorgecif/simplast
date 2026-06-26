@@ -1107,7 +1107,7 @@ function bowyerWatson(points) {
   const sC = n+2, pC = { x: cx + span * 10,  y: cy - span };
   const pts = [...points, pA, pB, pC];
 
-  let tris = [{ a: sA, b: sB, c: sC }];
+  let tris = [{ a: sA, b: sC, c: sB }]; // CCW winding required for circumcircle test
 
   for (let i = 0; i < n; i++) {
     const p = pts[i];
