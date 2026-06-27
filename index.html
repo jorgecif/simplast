@@ -370,9 +370,23 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
       </div>
     </div>
 
+    <!-- GLOBAL INTENSITY -->
+    <div>
+      <div class="section-title">3 · Intensidad global</div>
+      <div class="slider-group">
+        <div class="slider-row">
+          <div class="slider-label">
+            <span>Intensidad del efecto</span>
+            <span class="slider-val" id="val_intensity">100</span>
+          </div>
+          <input type="range" min="0" max="200" value="100" id="sl_intensity">
+        </div>
+      </div>
+    </div>
+
     <!-- CONTROLS -->
     <div id="controlsPanel">
-      <div class="section-title">3 · Ajustes</div>
+      <div class="section-title">4 · Ajustes del procedimiento</div>
       <div class="slider-group" id="sliderGroup">
         <!-- Dynamic sliders here -->
       </div>
@@ -380,7 +394,7 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
 
     <!-- ACTIONS -->
     <div>
-      <div class="section-title">4 · Acciones</div>
+      <div class="section-title">5 · Acciones</div>
       <div class="action-row">
         <button class="btn btn-primary" id="btnApply" onclick="applyEffect()" style="flex:1">⚡ Aplicar</button>
         <button class="btn btn-secondary" onclick="resetEffect()">↺ Reset</button>
@@ -398,6 +412,7 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
         <button class="view-tab" onclick="setView('after')" id="tabAfter">Después</button>
         <button class="view-tab" onclick="setView('before')" id="tabBefore">Antes</button>
       </div>
+      <button class="view-tab" id="btnLandmarks" onclick="toggleLandmarks()" title="Mostrar/ocultar puntos faciales detectados">👤 Puntos faciales</button>
       <div id="faceStatus" class="face-status detecting" style="display:none">
         <div class="dot"></div> <span id="faceStatusText">Detectando...</span>
       </div>
@@ -456,6 +471,8 @@ const state = {
   imageW: 0,
   imageH: 0,
   modelsLoaded: false,
+  showLandmarks: false,
+  globalIntensity: 100,
 };
 
 // ═══════════════════════════════════════════
@@ -479,11 +496,12 @@ const PROCEDURES = {
       const wv = vals.width/100;
       const pv = vals.projection/100;
       // Nose landmarks: 27(bridge top), 28,29,30(bridge), 31,32,33(tip), 34,35(nostrils)
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Tip refinement - lift and refine tip
       add(33, pv * fw*0.03, -tip * fh*0.04, 40);
@@ -514,11 +532,12 @@ const PROCEDURES = {
       const lv = vals.lowerVol/100;
       const cv = vals.cupid/100;
       const co = vals.corners/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Upper lip outer: 48,49,50,51,52,53,54
       add(48, co*fw*0.02, co*fh*0.01, 28);
@@ -551,11 +570,12 @@ const PROCEDURES = {
       const pv = vals.projection/100;
       const hv = vals.chinH/100;
       const wv = vals.width/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Chin: landmark 8 = bottom of chin, 6,7,9,10 = jaw near chin
       add(8, 0, pv*fh*0.05 + hv*fh*0.03, 55);
@@ -580,11 +600,12 @@ const PROCEDURES = {
       const rv = vals.reduction/100;
       const cbv = vals.cheekbone/100;
       const sl = vals.slim/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right cheek area: landmarks 1,2,3,4,5
       add(2, rv*fw*0.035, -rv*fh*0.02, 55);
@@ -616,11 +637,12 @@ const PROCEDURES = {
       const ul = vals.upperLift/100;
       const lt = vals.lowerTight/100;
       const ap = vals.aperture/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right eye upper: 37,38 (upper lid)
       add(37, 0, -(ul+ap)*fh*0.02, 22);
@@ -654,11 +676,12 @@ const PROCEDURES = {
       const jv = vals.jowl/100;
       const mv = vals.midface/100;
       const nv = vals.neck/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Jowl lift: jaw points 3,4,5,6,7,8,9,10,11,12,13
       add(4, jv*fw*0.02, -jv*fh*0.035, 50);
@@ -691,11 +714,12 @@ const PROCEDURES = {
       const bl = vals.browLift/100;
       const as_ = vals.archShape/100;
       const ff = vals.forehead/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right brow: 17,18,19,20,21
       add(17, 0, -bl*fh*0.02, 25);
@@ -726,11 +750,12 @@ const PROCEDURES = {
       const jd = vals.jawDef/100;
       const jw = vals.jawWidth/100;
       const an = vals.angle/100;
+      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma/Math.max(fw,fh));
+        disps.push([dx*S/fw, dy*S/fh]);
+        sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right jaw: 0,1,2,3,4
       add(0, (jd+an)*fw*0.02, -an*fh*0.02, 45);
@@ -775,11 +800,11 @@ void main(){
   vec2 td = vec2(0.);
   float tw = 0.001;
   for(int i=0;i<32;i++){
-    if(i>=uN) break;
+    float act = step(float(i)+0.5, float(uN));
     vec2 d = uv - uPts[i];
     float d2 = dot(d,d);
-    float s = uSigs[i];
-    float w = exp(-d2/(2.*s*s));
+    float s = max(uSigs[i], 0.00001);
+    float w = act * exp(-d2/(2.*s*s));
     td += w * uDisps[i];
     tw += w;
   }
@@ -844,7 +869,9 @@ function renderWarp(pts, disps, sigmas, strength) {
   gl.uniform1i(gl.getUniformLocation(prog,'uN'), n);
   gl.uniform1f(gl.getUniformLocation(prog,'uStr'), strength);
   // Flatten arrays
-  const pFlat = new Float32Array(64); const dFlat = new Float32Array(64); const sFlat = new Float32Array(32);
+  const pFlat = new Float32Array(64).fill(-99); // phantom pts off-screen
+  const dFlat = new Float32Array(64);
+  const sFlat = new Float32Array(32).fill(0.001); // safe sigma for phantom pts
   for(let i=0;i<n;i++){
     pFlat[i*2]=pts[i][0]; pFlat[i*2+1]=pts[i][1];
     dFlat[i*2]=disps[i][0]; dFlat[i*2+1]=disps[i][1];
@@ -958,7 +985,6 @@ async function processImage(src) {
   if (det) {
     const scaleX = dw / img.width;
     const scaleY = dh / img.height;
-    // Scale landmarks
     state.landmarks = det.landmarks.positions.map(p => ({
       x: p.x * scaleX, y: p.y * scaleY
     }));
@@ -968,15 +994,53 @@ async function processImage(src) {
       w: det.detection.box.width * scaleX,
       h: det.detection.box.height * scaleY,
     };
-    drawLandmarks();
   } else {
     state.landmarks = null;
     state.faceBox = null;
-    showToast('⚠️ No se detectó un rostro. El efecto se aplicará automáticamente. Usa foto frontal para mejores resultados.');
+    showToast('⚠️ No se detectó un rostro. El efecto se aplicará con estimación automática. Usa foto frontal para mejores resultados.');
+  }
+  // Always redraw landmarks into canvas (visible if toggle is on)
+  drawLandmarks();
+  if (state.showLandmarks) {
+    document.getElementById('landmarkCanvas').style.display = 'block';
   }
   // Apply effect
   applyEffect();
   document.getElementById('statusBadge').textContent = 'Listo';
+}
+
+// ═══════════════════════════════════════════
+// LANDMARK VISUALIZATION
+// ═══════════════════════════════════════════
+function range(a, b) { return Array.from({length: b-a}, (_,i) => a+i); }
+
+const LM_REGIONS = [
+  { label:'Contorno', idx: range(0,17),          color:'rgba(148,163,184,0.9)', fill:false },
+  { label:'Ceja D',   idx: range(17,22),          color:'rgba(251,191,36,1)',    fill:false },
+  { label:'Ceja I',   idx: range(22,27),          color:'rgba(251,191,36,1)',    fill:false },
+  { label:'Nariz',    idx: [27,28,29,30,33],      color:'rgba(96,165,250,1)',    fill:false },
+  { label:'Fosas',    idx: [31,32,33,34,35,31],   color:'rgba(96,165,250,1)',    fill:false },
+  { label:'Ojo D',    idx: range(36,42),           color:'rgba(52,211,153,1)',    fill:true  },
+  { label:'Ojo I',    idx: range(42,48),           color:'rgba(52,211,153,1)',    fill:true  },
+  { label:'Labio E',  idx: range(48,60),           color:'rgba(251,113,133,1)',   fill:true  },
+  { label:'Labio I',  idx: range(60,68),           color:'rgba(249,168,212,1)',   fill:true  },
+];
+
+// Point colors by landmark index
+const LM_COLORS = {
+  jaw:   '#94a3b8', browR:'#fbbf24', browL:'#fbbf24',
+  nose:  '#60a5fa', eyeR: '#34d399', eyeL: '#34d399',
+  lipO:  '#f472b6', lipI: '#fb7185',
+};
+function lmColor(i) {
+  if (i<=16) return LM_COLORS.jaw;
+  if (i<=21) return LM_COLORS.browR;
+  if (i<=26) return LM_COLORS.browL;
+  if (i<=35) return LM_COLORS.nose;
+  if (i<=41) return LM_COLORS.eyeR;
+  if (i<=47) return LM_COLORS.eyeL;
+  if (i<=59) return LM_COLORS.lipO;
+  return LM_COLORS.lipI;
 }
 
 function drawLandmarks() {
@@ -984,12 +1048,96 @@ function drawLandmarks() {
   const ctx = lmC.getContext('2d');
   ctx.clearRect(0, 0, lmC.width, lmC.height);
   if (!state.landmarks) return;
-  ctx.fillStyle = 'rgba(108,99,255,0.7)';
-  state.landmarks.forEach((p,i) => {
+  const lm = state.landmarks;
+
+  // Draw face bounding box
+  if (state.faceBox) {
+    const fb = state.faceBox;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(108,99,255,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5,4]);
+    ctx.strokeRect(fb.x, fb.y, fb.w, fb.h);
+    ctx.setLineDash([]);
+    // label
+    ctx.fillStyle = 'rgba(108,99,255,0.85)';
+    ctx.fillRect(fb.x, fb.y - 18, 60, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px system-ui';
+    ctx.fillText('ROSTRO', fb.x + 4, fb.y - 5);
+    ctx.restore();
+  }
+
+  // Draw region contour lines
+  LM_REGIONS.forEach(reg => {
+    if (reg.idx.length < 2) return;
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
-    ctx.fill();
+    ctx.moveTo(lm[reg.idx[0]].x, lm[reg.idx[0]].y);
+    for (let k = 1; k < reg.idx.length; k++) {
+      const p = lm[reg.idx[k]];
+      ctx.lineTo(p.x, p.y);
+    }
+    if (reg.fill) ctx.closePath();
+    ctx.strokeStyle = reg.color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = reg.color;
+    ctx.shadowBlur = 3;
+    ctx.stroke();
+    if (reg.fill) {
+      ctx.fillStyle = reg.color.replace('1)', '0.08)');
+      ctx.fill();
+    }
+    ctx.restore();
   });
+
+  // Draw individual landmark points
+  lm.forEach((p, i) => {
+    const c = lmColor(i);
+    ctx.save();
+    // outer glow ring
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+    ctx.fillStyle = c.replace(')',',0.2)').replace('rgba','rgba').replace('rgb','rgba').replace('(','(');
+    // simpler glow:
+    ctx.shadowColor = c;
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = c;
+    ctx.fill();
+    // white center dot
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.5, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.shadowBlur = 0;
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Draw landmark index labels for key points
+  const keyPts = [0,8,16,27,33,36,42,48,54,57,19,24];
+  ctx.save();
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  keyPts.forEach(i => {
+    const p = lm[i];
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(i, p.x+1, p.y - 5);
+    ctx.fillStyle = lmColor(i);
+    ctx.fillText(i, p.x, p.y - 6);
+  });
+  ctx.restore();
+}
+
+function toggleLandmarks() {
+  state.showLandmarks = !state.showLandmarks;
+  const btn = document.getElementById('btnLandmarks');
+  btn.classList.toggle('active', state.showLandmarks);
+  const lmC = document.getElementById('landmarkCanvas');
+  lmC.style.display = state.showLandmarks ? 'block' : 'none';
+  if (state.showLandmarks) {
+    drawLandmarks();
+    if (!state.landmarks) showToast('ℹ️ Carga una foto primero para detectar el rostro');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1009,8 +1157,8 @@ function applyEffect() {
     const fakeLm = generateFakeLandmarks(cx, cy, dw, dh);
     warpData = proc.getWarpData(fakeLm, dw, dh, vals);
   }
-  // Render with WebGL
-  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 1.0);
+  // Render with WebGL — base 3.5× so effects are clearly visible
+  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 3.5 * state.globalIntensity / 100);
   // Copy result to after canvas
   const afterCtx = document.getElementById('canvasAfter').getContext('2d');
   afterCtx.clearRect(0, 0, dw, dh);
@@ -1160,6 +1308,13 @@ function buildSliders() {
     });
   });
 }
+
+// Global intensity slider
+document.getElementById('sl_intensity').addEventListener('input', e => {
+  state.globalIntensity = +e.target.value;
+  document.getElementById('val_intensity').textContent = e.target.value;
+  if (state.originalImage) applyEffect();
+});
 
 // Procedure buttons
 document.querySelectorAll('.proc-btn').forEach(btn => {
