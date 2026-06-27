@@ -291,6 +291,31 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
 /* Fade in animation */
 @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
 .fade-in { animation: fadeIn 0.4s ease; }
+
+/* ─── RECOVERY STAGES ─── */
+.recovery-section { background:var(--surface2); border-radius:var(--radius); padding:12px; border:1px solid var(--border); }
+.stage-timeline { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
+.stage-btn {
+  padding:10px 4px; border-radius:10px; background:rgba(255,255,255,0.04);
+  border:1px solid var(--border); cursor:pointer; text-align:center;
+  color:var(--text); transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.stage-btn:hover { border-color:rgba(108,99,255,0.5); background:rgba(108,99,255,0.07); }
+.stage-btn.active { border-color:var(--accent); background:rgba(108,99,255,0.15); box-shadow:0 0 0 1px rgba(108,99,255,0.3); }
+.stage-btn .s-icon { font-size:1.25rem; }
+.stage-btn .s-name { font-size:0.68rem; font-weight:700; line-height:1.2; }
+.stage-btn .s-time { font-size:0.60rem; color:var(--muted); }
+.stage-actions { display:flex; gap:6px; }
+.stage-actions button {
+  flex:1; padding:8px 4px; border-radius:8px; font-size:0.72rem; font-weight:600;
+  cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.06);
+  color:var(--text); transition:all 0.2s; white-space:nowrap;
+}
+.stage-actions button:hover { background:rgba(255,255,255,0.11); }
+.stage-actions button:disabled { opacity:0.55; cursor:not-allowed; }
+.stage-actions button.ar-active { background:rgba(239,68,68,0.15); border-color:var(--red); color:var(--red); }
+/* AR canvas sits inside camera overlay on top of video */
+#arCanvas { display:none; border-radius:12px; max-width:90vw; max-height:65vh; }
 </style>
 </head>
 <body>
@@ -303,10 +328,11 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
 <!-- CAMERA OVERLAY -->
 <div id="cameraOverlay">
   <video id="videoEl" autoplay playsinline muted></video>
+  <canvas id="arCanvas"></canvas>
   <canvas id="camCanvas"></canvas>
   <div class="cam-btns">
     <button class="btn btn-secondary btn-sm" onclick="closeCamera()">✕ Cancelar</button>
-    <button class="btn-capture" onclick="capturePhoto()" title="Tomar foto">📸</button>
+    <button class="btn-capture" id="btnCapture" onclick="capturePhoto()" title="Tomar foto">📸</button>
     <button class="btn btn-secondary btn-sm" id="flipCamBtn" onclick="flipCamera()">🔄 Voltear</button>
   </div>
 </div>
@@ -396,9 +422,40 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
       </div>
     </div>
 
+    <!-- RECOVERY STAGES -->
+    <div>
+      <div class="section-title">5 · Visualización post-operatoria</div>
+      <div class="recovery-section">
+        <div style="font-size:0.68rem;color:var(--muted);margin-bottom:8px;line-height:1.4">
+          Simula las etapas de recuperación del paciente
+        </div>
+        <div class="stage-timeline">
+          <button class="stage-btn" data-stage="bandages" onclick="setRecoveryStage('bandages')">
+            <span class="s-icon">🩹</span>
+            <span class="s-name">Con vendas</span>
+            <span class="s-time">Días 1-3</span>
+          </button>
+          <button class="stage-btn" data-stage="swelling" onclick="setRecoveryStage('swelling')">
+            <span class="s-icon">🫧</span>
+            <span class="s-name">Hinchazón</span>
+            <span class="s-time">Sem. 1-2</span>
+          </button>
+          <button class="stage-btn active" data-stage="result" onclick="setRecoveryStage('result')">
+            <span class="s-icon">✨</span>
+            <span class="s-name">Resultado</span>
+            <span class="s-time">Final</span>
+          </button>
+        </div>
+        <div class="stage-actions">
+          <button id="btnVideoExport" onclick="generateRecoveryVideo()">🎬 Video</button>
+          <button id="btnLiveAR" onclick="toggleLiveAR()">📱 AR Live</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ACTIONS -->
     <div>
-      <div class="section-title">5 · Acciones</div>
+      <div class="section-title">6 · Acciones</div>
       <div class="action-row">
         <button class="btn btn-primary" id="btnApply" onclick="applyEffect()" style="flex:1">⚡ Aplicar</button>
         <button class="btn btn-secondary" onclick="resetEffect()">↺ Reset</button>
@@ -474,6 +531,10 @@ const state = {
   modelsLoaded: false,
   showLandmarks: false,
   globalIntensity: 100,
+  recoveryStage: 'result',        // 'bandages' | 'swelling' | 'result'
+  liveAR: false,
+  arAnimFrame: null,
+  arLandmarks: null,
 };
 
 // ═══════════════════════════════════════════
@@ -1305,41 +1366,302 @@ function toggleLandmarks() {
 }
 
 // ═══════════════════════════════════════════
+// RECOVERY STAGES
+// ═══════════════════════════════════════════
+function setRecoveryStage(stage) {
+  state.recoveryStage = stage;
+  document.querySelectorAll('.stage-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.stage === stage);
+  });
+  if (state.originalImage) applyEffect();
+}
+
+function drawBandages(ctx, lm, fw, fh) {
+  if (!lm || state.selectedProcs.size === 0) return;
+  const procs = state.selectedProcs;
+
+  function tapeLine(x1, y1, x2, y2, thick, alpha) {
+    alpha = alpha ?? 0.88;
+    const ang = Math.atan2(y2-y1, x2-x1);
+    const len = Math.hypot(x2-x1, y2-y1);
+    if (len < 1) return;
+    ctx.save();
+    ctx.translate(x1,y1); ctx.rotate(ang);
+    ctx.fillStyle = `rgba(240,228,210,${alpha})`;
+    ctx.fillRect(0,-thick/2,len,thick);
+    ctx.strokeStyle = 'rgba(200,185,162,0.35)'; ctx.lineWidth = 0.8;
+    const sp = 3;
+    for (let x=0;x<len;x+=sp){ctx.beginPath();ctx.moveTo(x,-thick/2);ctx.lineTo(x,thick/2);ctx.stroke();}
+    for (let y=-thick/2;y<thick/2;y+=sp){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(len,y);ctx.stroke();}
+    ctx.strokeStyle='rgba(175,158,135,0.55)'; ctx.lineWidth=0.5;
+    ctx.strokeRect(0,-thick/2,len,thick);
+    ctx.restore();
+  }
+
+  if (procs.has('rhinoplasty')) {
+    const nx=lm[30].x, ny=lm[27].y;
+    const nw=Math.abs(lm[35].x-lm[31].x)*1.2, nh=lm[30].y-lm[27].y+12;
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.28)'; ctx.shadowBlur=5; ctx.shadowOffsetY=2;
+    ctx.fillStyle='rgba(242,232,216,0.93)';
+    const hw=nw/2;
+    ctx.beginPath();
+    ctx.moveTo(nx-hw*0.62,ny-4); ctx.lineTo(nx+hw*0.62,ny-4);
+    ctx.lineTo(nx+hw,lm[30].y+10); ctx.lineTo(nx-hw,lm[30].y+10);
+    ctx.closePath(); ctx.fill(); ctx.restore();
+    for (let i=0;i<5;i++){
+      const fy=ny+i*(nh/4);
+      const hw2=(hw*0.62+(hw*0.38)*(i/4))*0.9;
+      tapeLine(nx-hw2,fy,nx+hw2,fy,nh*0.115);
+    }
+    tapeLine(lm[31].x-3,lm[31].y-5,lm[31].x-1,lm[31].y+9,5,0.72);
+    tapeLine(lm[35].x+3,lm[35].y-5,lm[35].x+1,lm[35].y+9,5,0.72);
+  }
+
+  if (procs.has('eyes')) {
+    [
+      {cx:(lm[36].x+lm[39].x)/2,cy:(lm[37].y+lm[41].y)/2,rx:Math.abs(lm[36].x-lm[39].x)*0.72,ry:Math.abs(lm[37].y-lm[41].y)*0.85+9},
+      {cx:(lm[42].x+lm[45].x)/2,cy:(lm[43].y+lm[47].y)/2,rx:Math.abs(lm[42].x-lm[45].x)*0.72,ry:Math.abs(lm[43].y-lm[47].y)*0.85+9},
+    ].forEach(e=>{
+      ctx.save();
+      ctx.shadowColor='rgba(0,0,0,0.20)'; ctx.shadowBlur=4;
+      ctx.fillStyle='rgba(250,245,238,0.96)';
+      ctx.beginPath(); ctx.ellipse(e.cx,e.cy,e.rx,e.ry,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(200,188,168,0.65)'; ctx.lineWidth=1; ctx.stroke();
+      ctx.restore();
+      tapeLine(e.cx-e.rx*1.55,e.cy-e.ry*0.22,e.cx+e.rx*1.55,e.cy-e.ry*0.22,6,0.82);
+      tapeLine(e.cx-e.rx*1.55,e.cy+e.ry*0.22,e.cx+e.rx*1.55,e.cy+e.ry*0.22,6,0.72);
+    });
+  }
+
+  if (procs.has('lips')) {
+    const lm51=lm[51], lw=Math.abs(lm[54].x-lm[48].x)*1.25;
+    tapeLine(lm51.x-lw/2,lm51.y,lm51.x+lw/2,lm51.y,lw*0.10,0.84);
+    tapeLine(lm51.x-lw*0.45,lm[57].y,lm51.x+lw*0.45,lm[57].y,lw*0.085,0.74);
+  }
+
+  if (procs.has('facelift')||procs.has('cheeks')||procs.has('jaw')) {
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6;
+    ctx.fillStyle='rgba(242,236,224,0.80)';
+    ctx.beginPath();
+    ctx.moveTo(lm[0].x-18,lm[1].y); ctx.lineTo(lm[0].x-28,lm[5].y);
+    ctx.lineTo(lm[5].x+15,lm[5].y+4); ctx.lineTo(lm[5].x+10,lm[1].y-4);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(lm[16].x+18,lm[15].y); ctx.lineTo(lm[16].x+28,lm[11].y);
+    ctx.lineTo(lm[11].x-15,lm[11].y+4); ctx.lineTo(lm[11].x-10,lm[15].y-4);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(lm[6].x,lm[6].y+4); ctx.lineTo(lm[10].x,lm[10].y+4);
+    ctx.lineTo(lm[10].x+2,lm[8].y+24); ctx.lineTo(lm[8].x,lm[8].y+30);
+    ctx.lineTo(lm[6].x-2,lm[8].y+24); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    for(let i=0;i<5;i++){
+      const t=i/4, y=lm[1].y+t*(lm[5].y-lm[1].y);
+      tapeLine(lm[0].x-24,y,lm[5].x+8,y,3,0.42);
+    }
+  }
+
+  if (procs.has('chin')) {
+    const jw=Math.abs(lm[16].x-lm[0].x)*0.36;
+    ctx.save(); ctx.fillStyle='rgba(240,230,215,0.82)';
+    ctx.beginPath();
+    ctx.moveTo(lm[8].x-jw,lm[8].y-5);
+    ctx.bezierCurveTo(lm[8].x-jw*0.55,lm[8].y+30,lm[8].x+jw*0.55,lm[8].y+30,lm[8].x+jw,lm[8].y-5);
+    ctx.bezierCurveTo(lm[8].x+jw*0.5,lm[8].y+7,lm[8].x-jw*0.5,lm[8].y+7,lm[8].x-jw,lm[8].y-5);
+    ctx.fill(); ctx.restore();
+  }
+
+  if (procs.has('brow')) {
+    [[lm[17],lm[21]],[lm[22],lm[26]]].forEach(([a,b])=>{
+      tapeLine(a.x-5,a.y,b.x+5,b.y,5,0.82);
+      tapeLine(a.x-4,a.y+5,b.x+4,b.y+5,4,0.62);
+    });
+  }
+
+  ctx.save();
+  ctx.fillStyle='rgba(8,12,20,0.60)';
+  ctx.fillRect(0,fh-40,fw,40);
+  ctx.fillStyle='rgba(255,255,255,0.90)';
+  ctx.font=`bold ${Math.max(11,Math.round(fw*0.033))}px 'Segoe UI',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('Post-op · Días 1-3 · Vendajes', fw/2, fh-13);
+  ctx.restore();
+}
+
+function drawBruisingOverlay(ctx, lm, fw, fh) {
+  if (!lm || state.selectedProcs.size === 0) return;
+  const procs = state.selectedProcs;
+  const rg = (cx,cy,r,c0,c1) => {
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,c0); g.addColorStop(1,c1); return g;
+  };
+
+  if (procs.has('rhinoplasty')) {
+    [[lm[40],lm[41],lm[39]],[lm[46],lm[47],lm[45]]].forEach(([a,b,c])=>{
+      const ex=(a.x+b.x+c.x)/3, ey=(a.y+b.y)/2+12;
+      ctx.fillStyle=rg(ex,ey,fw*0.10,'rgba(62,22,72,0.54)','rgba(62,22,72,0)');
+      ctx.beginPath(); ctx.ellipse(ex,ey,fw*0.10,fh*0.056,0,0,Math.PI*2); ctx.fill();
+    });
+    const nt=lm[30];
+    ctx.fillStyle=rg(nt.x,nt.y,fw*0.11,'rgba(215,82,60,0.40)','rgba(215,82,60,0)');
+    ctx.beginPath(); ctx.ellipse(nt.x,nt.y,fw*0.11,fh*0.09,0,0,Math.PI*2); ctx.fill();
+    [[lm[3]],[lm[13]]].forEach(([p])=>{
+      ctx.fillStyle=rg(p.x,p.y-5,fw*0.07,'rgba(95,35,95,0.28)','rgba(95,35,95,0)');
+      ctx.beginPath(); ctx.ellipse(p.x,p.y-5,fw*0.07,fh*0.05,0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  if (procs.has('eyes')) {
+    [[lm[37],lm[38]],[lm[43],lm[44]]].forEach(([a,b])=>{
+      const ex=(a.x+b.x)/2, ey=a.y+5;
+      ctx.fillStyle=rg(ex,ey,fw*0.08,'rgba(88,38,88,0.48)','rgba(88,38,88,0)');
+      ctx.beginPath(); ctx.ellipse(ex,ey,fw*0.08,fh*0.046,0,0,Math.PI*2); ctx.fill();
+    });
+    [[lm[40],lm[41]],[lm[46],lm[47]]].forEach(([a,b])=>{
+      const ex=(a.x+b.x)/2, ey=a.y+14;
+      ctx.fillStyle=rg(ex,ey,fw*0.075,'rgba(110,55,38,0.36)','rgba(110,55,38,0)');
+      ctx.beginPath(); ctx.ellipse(ex,ey,fw*0.075,fh*0.042,0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  if (procs.has('lips')) {
+    [[lm[51],'rgba(200,50,62,0.44)'],[lm[57],'rgba(180,45,55,0.32)']].forEach(([p,col])=>{
+      ctx.fillStyle=rg(p.x,p.y,fw*0.10,col,col.replace(/[\d.]+\)$/,'0)'));
+      ctx.beginPath(); ctx.ellipse(p.x,p.y,fw*0.10,fh*0.055,0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  if (procs.has('facelift')||procs.has('cheeks')) {
+    [[lm[3]],[lm[13]]].forEach(([p])=>{
+      ctx.fillStyle=rg(p.x,p.y,fw*0.12,'rgba(175,72,60,0.30)','rgba(175,72,60,0)');
+      ctx.beginPath(); ctx.ellipse(p.x,p.y,fw*0.12,fh*0.09,0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  if (procs.has('chin')||procs.has('jaw')) {
+    const ch=lm[8];
+    ctx.fillStyle=rg(ch.x,ch.y-5,fw*0.09,'rgba(165,62,50,0.33)','rgba(165,62,50,0)');
+    ctx.beginPath(); ctx.ellipse(ch.x,ch.y-5,fw*0.09,fh*0.07,0,0,Math.PI*2); ctx.fill();
+  }
+
+  if (procs.has('brow')) {
+    [[lm[19]],[lm[24]]].forEach(([p])=>{
+      ctx.fillStyle=rg(p.x,p.y-4,fw*0.08,'rgba(108,48,82,0.42)','rgba(108,48,82,0)');
+      ctx.beginPath(); ctx.ellipse(p.x,p.y-4,fw*0.08,fh*0.045,0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  ctx.save();
+  ctx.fillStyle='rgba(8,12,20,0.60)';
+  ctx.fillRect(0,fh-40,fw,40);
+  ctx.fillStyle='rgba(255,255,255,0.90)';
+  ctx.font=`bold ${Math.max(11,Math.round(fw*0.033))}px 'Segoe UI',sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('Semana 1-2 · Hinchazón post-operatoria', fw/2, fh-13);
+  ctx.restore();
+}
+
+function getSwellingWarpData(lm, fw, fh) {
+  if (!lm) return {points:[],disps:[],sigmas:[]};
+  const procs=state.selectedProcs;
+  const pts=[],disps=[],sigs=[];
+  const faceH=Math.max(lm[8].y-lm[27].y,fw*0.18);
+  const sc=Math.max(fw,fh);
+  const nS=0.07*faceH/sc, lS=0.055*faceH/sc, eS=0.05*faceH/sc, wS=0.11*faceH/sc;
+  const add=(px,py,dx,dy,sig)=>{pts.push([px/fw,py/fh]);disps.push([dx/fw,dy/fh]);sigs.push(sig);};
+
+  if (procs.has('rhinoplasty')) {
+    const sw=Math.max((state.sliderValues['rhinoplasty_tipLift']||0),(state.sliderValues['rhinoplasty_tipNarrow']||0),(state.sliderValues['rhinoplasty_alarWidth']||0),25)/100*0.75;
+    add(lm[30].x,lm[30].y,0,fh*0.011*sw,nS*1.2);
+    add(lm[33].x,lm[33].y,0,fh*0.008*sw,nS);
+    add(lm[31].x,lm[31].y,-fw*0.017*sw,fh*0.006*sw,nS);
+    add(lm[35].x,lm[35].y, fw*0.017*sw,fh*0.006*sw,nS);
+    add(lm[28].x,lm[28].y,0,fh*0.005*sw,nS*0.9);
+  }
+  if (procs.has('lips')) {
+    const sw=Math.max((state.sliderValues['lips_upperVol']||0),(state.sliderValues['lips_lowerVol']||0),35)/100*0.80;
+    add(lm[51].x,lm[51].y,0,-fh*0.013*sw,lS*1.2);
+    add(lm[57].x,lm[57].y,0, fh*0.013*sw,lS*1.2);
+    add(lm[48].x,lm[48].y,-fw*0.009*sw,0,lS);
+    add(lm[54].x,lm[54].y, fw*0.009*sw,0,lS);
+    add(lm[50].x,lm[50].y,0,-fh*0.009*sw,lS);
+    add(lm[56].x,lm[56].y,0, fh*0.009*sw,lS);
+  }
+  if (procs.has('eyes')) {
+    const sw=Math.max((state.sliderValues['eyes_upperLift']||0),35)/100*0.70;
+    [[lm[40],lm[41]],[lm[46],lm[47]]].forEach(([a,b])=>{add(a.x,a.y,0,fh*0.009*sw,eS);add(b.x,b.y,0,fh*0.007*sw,eS);});
+    [[lm[37],lm[38]],[lm[43],lm[44]]].forEach(([a,b])=>{add(a.x,a.y,0,fh*0.006*sw,eS);add(b.x,b.y,0,fh*0.006*sw,eS);});
+  }
+  if (procs.has('cheeks')||procs.has('facelift')) {
+    const sw=0.45;
+    add(lm[3].x,lm[3].y,-fw*0.016*sw,0,wS); add(lm[4].x,lm[4].y,-fw*0.012*sw,0,wS);
+    add(lm[13].x,lm[13].y,fw*0.016*sw,0,wS); add(lm[12].x,lm[12].y,fw*0.012*sw,0,wS);
+  }
+  if (procs.has('chin')) {
+    const sw=Math.max((state.sliderValues['chin_project']||0),30)/100*0.65;
+    add(lm[8].x,lm[8].y,0,fh*0.016*sw,nS*1.4);
+    add(lm[7].x,lm[7].y,-fw*0.010*sw,fh*0.009*sw,nS);
+    add(lm[9].x,lm[9].y, fw*0.010*sw,fh*0.009*sw,nS);
+  }
+  if (procs.has('jaw')) {
+    const sw=0.38;
+    add(lm[4].x,lm[4].y,-fw*0.013*sw,fh*0.006*sw,wS); add(lm[12].x,lm[12].y,fw*0.013*sw,fh*0.006*sw,wS);
+    add(lm[3].x,lm[3].y,-fw*0.010*sw,0,wS);             add(lm[13].x,lm[13].y,fw*0.010*sw,0,wS);
+  }
+  if (procs.has('brow')) {
+    const sw=Math.max((state.sliderValues['brow_browLift']||0),30)/100*0.60;
+    [[lm[19]],[lm[24]]].forEach(([p])=>add(p.x,p.y,0,fh*0.009*sw,eS*1.2));
+  }
+  return {points:pts,disps,sigmas:sigs};
+}
+
+// ═══════════════════════════════════════════
 // EFFECT ENGINE
 // ═══════════════════════════════════════════
 function applyEffect() {
   if (!state.originalImage) return;
   const dw = state.imageW, dh = state.imageH;
   const lm = state.landmarks || generateFakeLandmarks(dw*0.5, dh*0.45, dw, dh);
-
-  // Combine warp data from ALL selected procedures
-  const allPts = [], allDisps = [], allSigs = [];
-  for (const procId of state.selectedProcs) {
-    const proc = PROCEDURES[procId];
-    const vals = {};
-    proc.sliders.forEach(sl => { vals[sl.id] = state.sliderValues[`${procId}_${sl.id}`] ?? 0; });
-    const wd = proc.getWarpData(lm, dw, dh, vals);
-    allPts.push(...wd.points);
-    allDisps.push(...wd.disps);
-    allSigs.push(...wd.sigmas);
-  }
-
   const afterCtx = document.getElementById('canvasAfter').getContext('2d');
   afterCtx.clearRect(0, 0, dw, dh);
 
-  const str = state.globalIntensity / 100;
-  if (allPts.length === 0) {
-    // No active procedures → show original photo
+  if (state.recoveryStage === 'bandages') {
     afterCtx.drawImage(state.originalImage, 0, 0, dw, dh);
-  } else {
-    renderWarp(allPts, allDisps, allSigs, str);
-    afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
-  }
+    drawBandages(afterCtx, lm, dw, dh);
 
-  // Refresh landmark overlay (original + projected)
-  if (state.showLandmarks) {
-    drawLandmarks();
-    if (allPts.length > 0) drawProjectedLandmarks(allPts, allDisps, allSigs, str, dw, dh);
+  } else if (state.recoveryStage === 'swelling') {
+    const sw = getSwellingWarpData(lm, dw, dh);
+    if (sw.points.length > 0) {
+      renderWarp(sw.points, sw.disps, sw.sigmas, 1.0);
+      afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
+    } else {
+      afterCtx.drawImage(state.originalImage, 0, 0, dw, dh);
+    }
+    drawBruisingOverlay(afterCtx, lm, dw, dh);
+
+  } else {
+    // Normal result view — combine warp from all selected procs
+    const allPts=[], allDisps=[], allSigs=[];
+    for (const procId of state.selectedProcs) {
+      const proc = PROCEDURES[procId];
+      const vals = {};
+      proc.sliders.forEach(sl => { vals[sl.id] = state.sliderValues[`${procId}_${sl.id}`] ?? 0; });
+      const wd = proc.getWarpData(lm, dw, dh, vals);
+      allPts.push(...wd.points); allDisps.push(...wd.disps); allSigs.push(...wd.sigmas);
+    }
+    const str = state.globalIntensity / 100;
+    if (allPts.length === 0) {
+      afterCtx.drawImage(state.originalImage, 0, 0, dw, dh);
+    } else {
+      renderWarp(allPts, allDisps, allSigs, str);
+      afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
+    }
+    if (state.showLandmarks) {
+      drawLandmarks();
+      if (allPts.length > 0) drawProjectedLandmarks(allPts, allDisps, allSigs, str, dw, dh);
+    }
   }
   updateSplitView();
 }
@@ -1629,6 +1951,7 @@ async function openCamera() {
 }
 
 function closeCamera() {
+  if (state.liveAR) { stopLiveAR(); return; }
   if (state.cameraStream) {
     state.cameraStream.getTracks().forEach(t => t.stop());
     state.cameraStream = null;
@@ -1684,6 +2007,223 @@ function downloadResult() {
   a.href = tmp.toDataURL('image/jpeg', 0.95);
   a.click();
   showToast('✅ Imagen descargada');
+}
+
+// ═══════════════════════════════════════════
+// RECOVERY VIDEO EXPORT
+// ═══════════════════════════════════════════
+async function generateRecoveryVideo() {
+  if (!state.originalImage) { showToast('Carga una fotografía primero'); return; }
+  if (state.selectedProcs.size === 0) { showToast('Selecciona al menos un procedimiento'); return; }
+  const canvas = document.getElementById('canvasAfter');
+  let stream;
+  try { stream = canvas.captureStream(25); } catch(e) {
+    showToast('Tu navegador no soporta exportación de video'); return;
+  }
+  const mime = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+    .find(m => { try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; } }) || 'video/webm';
+  const recorder = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:5_000_000});
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  const prevStage = state.recoveryStage;
+  const btn = document.getElementById('btnVideoExport');
+  btn.textContent = '⏺ Grabando...'; btn.disabled = true;
+
+  recorder.onstop = () => {
+    btn.textContent = '🎬 Video'; btn.disabled = false;
+    const blob = new Blob(chunks, {type:mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download='recuperacion-estetica.webm';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    setRecoveryStage(prevStage);
+    showToast('✅ Video de recuperación descargado');
+  };
+
+  recorder.start(80);
+  const stages=['bandages','swelling','result'];
+  const labels=['Días 1-3 · Vendajes post-op','Semana 1-2 · Hinchazón','✨ Resultado final'];
+  const durations=[2800,2800,3400];
+
+  for (let i=0;i<stages.length;i++) {
+    state.recoveryStage=stages[i];
+    applyEffect();
+    // Overlay progress label
+    const ctx=canvas.getContext('2d');
+    ctx.save();
+    ctx.fillStyle='rgba(6,10,18,0.60)';
+    ctx.fillRect(0,canvas.height-52,canvas.width,52);
+    ctx.fillStyle='rgba(255,255,255,0.93)';
+    const fs=Math.max(12,Math.round(canvas.width*0.042));
+    ctx.font=`bold ${fs}px 'Segoe UI',sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillText(labels[i],canvas.width/2,canvas.height-18);
+    // Progress dots
+    stages.forEach((_,j)=>{
+      ctx.fillStyle = j===i ? 'rgba(108,99,255,1)' : 'rgba(255,255,255,0.32)';
+      ctx.beginPath();
+      ctx.arc(canvas.width/2-(stages.length-1)*12+j*24, canvas.height-42, 5, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.restore();
+    await new Promise(r=>setTimeout(r,durations[i]));
+  }
+  recorder.stop();
+}
+
+// ═══════════════════════════════════════════
+// LIVE AR MODE
+// ═══════════════════════════════════════════
+let _arFrameCount = 0;
+
+function toggleLiveAR() {
+  if (state.liveAR) stopLiveAR(); else startLiveAR();
+}
+
+async function startLiveAR() {
+  if (!state.modelsLoaded) { showToast('Modelos de detección aún cargando…'); return; }
+  const overlay = document.getElementById('cameraOverlay');
+  const video = document.getElementById('videoEl');
+  const arCanvas = document.getElementById('arCanvas');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode:state.facingMode, width:{ideal:640}, height:{ideal:480}}
+    });
+    state.cameraStream = stream;
+    video.srcObject = stream;
+    await video.play();
+  } catch(e) {
+    showToast('❌ Error accediendo a la cámara: '+e.message); return;
+  }
+
+  state.liveAR = true;
+  state.arLandmarks = null;
+  _arFrameCount = 0;
+
+  overlay.classList.add('active');
+  video.style.display = 'none';
+  arCanvas.style.display = 'block';
+  document.getElementById('btnCapture').style.display = 'none';
+  document.getElementById('btnLiveAR').textContent = '⏹ Salir AR';
+  document.getElementById('btnLiveAR').classList.add('ar-active');
+  showToast('📱 AR activado · Selecciona un procedimiento para ver efectos en vivo');
+
+  // Init WebGL for AR once with a reasonable default size
+  const glC = document.getElementById('glCanvas');
+  glC.width = 640; glC.height = 480;
+  state.gl = null; state.program = null; state.texture = null;
+  initWebGL();
+
+  requestAnimationFrame(processARFrame);
+}
+
+function stopLiveAR() {
+  state.liveAR = false;
+  if (state.arAnimFrame) { cancelAnimationFrame(state.arAnimFrame); state.arAnimFrame = null; }
+  if (state.cameraStream) { state.cameraStream.getTracks().forEach(t=>t.stop()); state.cameraStream = null; }
+  document.getElementById('videoEl').style.display = 'block';
+  document.getElementById('arCanvas').style.display = 'none';
+  document.getElementById('btnCapture').style.display = '';
+  document.getElementById('cameraOverlay').classList.remove('active');
+  document.getElementById('btnLiveAR').textContent = '📱 AR Live';
+  document.getElementById('btnLiveAR').classList.remove('ar-active');
+}
+
+async function processARFrame() {
+  if (!state.liveAR) return;
+  const video = document.getElementById('videoEl');
+  const arCanvas = document.getElementById('arCanvas');
+  const glC = document.getElementById('glCanvas');
+  const camC = document.getElementById('camCanvas');
+
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    const vw=video.videoWidth, vh=video.videoHeight;
+
+    if (glC.width!==vw||glC.height!==vh) {
+      glC.width=vw; glC.height=vh;
+      state.gl=null; state.program=null; state.texture=null;
+      initWebGL();
+    }
+    arCanvas.width=vw; arCanvas.height=vh;
+    camC.width=vw; camC.height=vh;
+    camC.getContext('2d').drawImage(video,0,0,vw,vh);
+
+    // Detect landmarks every 20 frames (~0.7 s at 30 fps)
+    _arFrameCount++;
+    if (_arFrameCount%20===1 || !state.arLandmarks) {
+      try {
+        const det = await faceapi
+          .detectSingleFace(camC, new faceapi.SsdMobilenetv1Options({minConfidence:0.42}))
+          .withFaceLandmarks();
+        if (det) state.arLandmarks = det.landmarks.positions.map(p=>({x:p.x,y:p.y}));
+      } catch(e) { /* keep previous */ }
+    }
+
+    const arCtx = arCanvas.getContext('2d');
+    arCtx.clearRect(0,0,vw,vh);
+
+    if (state.arLandmarks && state.selectedProcs.size > 0) {
+      const lm=state.arLandmarks;
+
+      if (state.recoveryStage==='bandages') {
+        arCtx.drawImage(camC,0,0);
+        drawBandages(arCtx,lm,vw,vh);
+
+      } else if (state.recoveryStage==='swelling') {
+        const sw=getSwellingWarpData(lm,vw,vh);
+        if (sw.points.length>0) {
+          uploadTexture(camC);
+          renderWarp(sw.points,sw.disps,sw.sigmas,1.0);
+          arCtx.drawImage(glC,0,0);
+        } else { arCtx.drawImage(camC,0,0); }
+        drawBruisingOverlay(arCtx,lm,vw,vh);
+
+      } else {
+        const aP=[],aD=[],aS=[];
+        for (const procId of state.selectedProcs) {
+          const proc=PROCEDURES[procId], vals={};
+          proc.sliders.forEach(sl=>{vals[sl.id]=state.sliderValues[`${procId}_${sl.id}`]??0;});
+          const wd=proc.getWarpData(lm,vw,vh,vals);
+          aP.push(...wd.points); aD.push(...wd.disps); aS.push(...wd.sigmas);
+        }
+        if (aP.length>0) {
+          uploadTexture(camC);
+          renderWarp(aP,aD,aS,state.globalIntensity/100);
+          arCtx.drawImage(glC,0,0);
+        } else { arCtx.drawImage(camC,0,0); }
+      }
+
+    } else {
+      arCtx.drawImage(camC,0,0);
+      if (!state.arLandmarks) {
+        arCtx.save();
+        arCtx.fillStyle='rgba(0,0,0,0.55)';
+        arCtx.fillRect(0,vh-40,vw,40);
+        arCtx.fillStyle='rgba(255,200,50,0.95)';
+        arCtx.font=`bold ${Math.round(vw*0.035)}px sans-serif`;
+        arCtx.textAlign='center';
+        arCtx.fillText('Detectando rostro…',vw/2,vh-12);
+        arCtx.restore();
+      }
+    }
+
+    // Stage badge in AR view
+    const stageLbl={bandages:'🩹 Con vendas',swelling:'🫧 Hinchazón',result:'✨ Resultado'};
+    arCtx.save();
+    arCtx.fillStyle='rgba(8,12,20,0.65)';
+    arCtx.roundRect ? arCtx.roundRect(8,8,160,32,8) : arCtx.rect(8,8,160,32);
+    arCtx.fill();
+    arCtx.fillStyle='rgba(255,255,255,0.92)';
+    arCtx.font=`bold ${Math.round(vw*0.030)}px 'Segoe UI',sans-serif`;
+    arCtx.textAlign='left';
+    arCtx.fillText(stageLbl[state.recoveryStage]||'',16,30);
+    arCtx.restore();
+  }
+
+  state.arAnimFrame = requestAnimationFrame(processARFrame);
 }
 
 // ═══════════════════════════════════════════
