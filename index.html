@@ -107,9 +107,12 @@ header {
   color: var(--text);
 }
 .proc-btn:hover { border-color: rgba(108,99,255,0.5); background: rgba(108,99,255,0.08); }
-.proc-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.15); color: var(--accent2); }
+.proc-btn.active { border-color: var(--accent); }
+.proc-btn.selected { border-color: var(--green); background: rgba(16,185,129,0.1); }
+.proc-btn.active.selected { border-color: var(--green); background: rgba(16,185,129,0.15); }
 .proc-btn .proc-icon { font-size:1.3rem; display:block; margin-bottom:3px; }
 .proc-btn .proc-name { font-size:0.7rem; font-weight:600; line-height:1.2; }
+.proc-btn .proc-check { display:block; font-size:0.65rem; font-weight:800; color:var(--green); min-height:10px; }
 
 /* SLIDERS */
 .slider-group { background: var(--surface2); border-radius: var(--radius); padding: 14px; border: 1px solid var(--border); }
@@ -342,30 +345,31 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
     <!-- PROCEDURES -->
     <div>
       <div class="section-title">2 · Procedimiento</div>
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px;">Haz clic para activar · combina varios</div>
       <div class="proc-grid" id="procGrid">
-        <button class="proc-btn active" data-proc="rhinoplasty">
-          <span class="proc-icon">👃</span><span class="proc-name">Rinoplastia</span>
+        <button class="proc-btn" data-proc="rhinoplasty">
+          <span class="proc-icon">👃</span><span class="proc-name">Rinoplastia</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="lips">
-          <span class="proc-icon">💋</span><span class="proc-name">Aumento Labios</span>
+          <span class="proc-icon">💋</span><span class="proc-name">Labios</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="chin">
-          <span class="proc-icon">🫦</span><span class="proc-name">Mentoplastia</span>
+          <span class="proc-icon">🫦</span><span class="proc-name">Mentoplastia</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="cheeks">
-          <span class="proc-icon">✨</span><span class="proc-name">Bichectomía</span>
+          <span class="proc-icon">✨</span><span class="proc-name">Bichectomía</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="eyes">
-          <span class="proc-icon">👁️</span><span class="proc-name">Blefaroplastia</span>
+          <span class="proc-icon">👁️</span><span class="proc-name">Blefaroplastia</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="facelift">
-          <span class="proc-icon">⬆️</span><span class="proc-name">Lifting Facial</span>
+          <span class="proc-icon">⬆️</span><span class="proc-name">Lifting</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="brow">
-          <span class="proc-icon">🌟</span><span class="proc-name">Botox Frente</span>
+          <span class="proc-icon">🌟</span><span class="proc-name">Botox Cejas</span><span class="proc-check"></span>
         </button>
         <button class="proc-btn" data-proc="jaw">
-          <span class="proc-icon">💎</span><span class="proc-name">Definición Mandíbula</span>
+          <span class="proc-icon">💎</span><span class="proc-name">Mandíbula</span><span class="proc-check"></span>
         </button>
       </div>
     </div>
@@ -459,17 +463,14 @@ const state = {
   landmarks: null,
   faceBox: null,
   currentProc: 'rhinoplasty',
+  selectedProcs: new Set(),       // procs with active effects
   viewMode: 'split',
   splitX: 0.5,
-  dragging: false,
-  gl: null,
-  program: null,
-  texture: null,
-  sliderValues: {},
+  gl: null, program: null, texture: null,
+  sliderValues: {},               // keyed as "procId_sliderId"
   cameraStream: null,
   facingMode: 'user',
-  imageW: 0,
-  imageH: 0,
+  imageW: 0, imageH: 0,
   modelsLoaded: false,
   showLandmarks: false,
   globalIntensity: 100,
@@ -478,40 +479,73 @@ const state = {
 // ═══════════════════════════════════════════
 // PROCEDURE DEFINITIONS
 // ═══════════════════════════════════════════
+// Displacement rule (inverse warp, strength=1.0 applied in renderWarp):
+//   Feature moves RIGHT  → dx = +pixels/2
+//   Feature moves LEFT   → dx = -pixels/2
+//   Feature moves UP     → dy = -pixels/2
+//   Feature moves DOWN   → dy = +pixels/2
+// All defaults are 0 so no effect until user moves a slider.
 const PROCEDURES = {
   rhinoplasty: {
     name: 'Rinoplastia',
     sliders: [
-      { id:'tipRef', label:'Refinamiento de punta', min:0, max:100, def:50 },
-      { id:'bridge', label:'Perfil del puente', min:-50, max:50, def:0 },
-      { id:'width', label:'Estrechar fosas nasales', min:0, max:100, def:40 },
-      { id:'projection', label:'Proyección', min:-50, max:50, def:0 },
+      { id:'tipLift',   label:'Elevación de punta',       min:0, max:100, def:0 },
+      { id:'tipNarrow', label:'Refinamiento de punta',    min:0, max:100, def:0 },
+      { id:'alarWidth', label:'Reducción fosas nasales',  min:0, max:100, def:0 },
+      { id:'hump',      label:'Reducción de giba',        min:0, max:100, def:0 },
     ],
-    // Returns control points and displacements in NORMALIZED coords (0..1 relative to face bbox)
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const tip = vals.tipRef/100;
-      const bv = vals.bridge/100;
-      const wv = vals.width/100;
-      const pv = vals.projection/100;
-      // Nose landmarks: 27(bridge top), 28,29,30(bridge), 31,32,33(tip), 34,35(nostrils)
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Tip refinement - lift and refine tip
-      add(33, pv * fw*0.03, -tip * fh*0.04, 40);
-      // Bridge straightening
-      add(28, bv > 0 ? -bv*fw*0.015 : 0, bv > 0 ? bv*fh*0.02 : bv*fh*0.01, 35);
-      add(29, bv*fw*0.01, bv > 0 ? bv*fh*0.015 : 0, 30);
-      // Nostril narrowing
-      add(31, wv*fw*0.03, 0, 35);
-      add(35, -wv*fw*0.03, 0, 35);
-      add(32, wv*fw*0.015, tip*fh*0.01, 28);
-      add(34, -wv*fw*0.015, tip*fh*0.01, 28);
+      const addPt = (px, py, dx, dy, sig) => {
+        points.push([px/fw, py/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sig*1.3/sc);
+      };
+      // Elevación de punta (LM30=tip, LM33=columella base, LM28=supratip)
+      const tl = vals.tipLift / 100;
+      if (tl > 0) {
+        add(30,  0,           -tl*fh*0.022, 36);  // tip UP
+        add(33,  0,           -tl*fh*0.014, 28);  // columella up
+        add(28,  0,           -tl*fh*0.008, 32);  // supratip follows
+        add(32,  tl*fw*0.008, -tl*fh*0.010, 22);
+        add(34, -tl*fw*0.008, -tl*fh*0.010, 22);
+      }
+      // Refinamiento de punta (narrow the dome/tip complex)
+      const tn = vals.tipNarrow / 100;
+      if (tn > 0) {
+        add(31,  tn*fw*0.018, -tn*fh*0.005, 26);  // L alar → inward
+        add(35, -tn*fw*0.018, -tn*fh*0.005, 26);  // R alar → inward
+        add(32,  tn*fw*0.012,  0,            20);
+        add(34, -tn*fw*0.012,  0,            20);
+        add(30,  0,           -tn*fh*0.008, 18);  // tip slightly UP
+      }
+      // Reducción de fosas nasales (alae)
+      const aw = vals.alarWidth / 100;
+      if (aw > 0) {
+        add(31,  aw*fw*0.022, 0, 30);   // L alar → inward (RIGHT)
+        add(35, -aw*fw*0.022, 0, 30);   // R alar → inward (LEFT)
+        add(32,  aw*fw*0.014, 0, 24);
+        add(34, -aw*fw*0.014, 0, 24);
+      }
+      // Reducción de giba — narrows bridge using virtual side points
+      const hm = vals.hump / 100;
+      if (hm > 0) {
+        const cx = lm[27].x;
+        const bw = (lm[35].x - lm[31].x) * 0.32;  // approx half-bridge width
+        addPt(cx - bw, lm[27].y,  hm*fw*0.016, 0, 26);
+        addPt(cx + bw, lm[27].y, -hm*fw*0.016, 0, 26);
+        addPt(cx - bw, lm[29].y,  hm*fw*0.018, 0, 26);
+        addPt(cx + bw, lm[29].y, -hm*fw*0.018, 0, 26);
+        add(28,  0, hm*fh*0.006, 22);  // bridge root down slightly (reduces height)
+      }
       return { points, disps, sigmas };
     }
   },
@@ -519,38 +553,54 @@ const PROCEDURES = {
   lips: {
     name: 'Aumento de Labios',
     sliders: [
-      { id:'upperVol', label:'Volumen labio superior', min:0, max:100, def:50 },
-      { id:'lowerVol', label:'Volumen labio inferior', min:0, max:100, def:40 },
-      { id:'cupid', label:'Arco de Cupido', min:0, max:100, def:30 },
-      { id:'corners', label:'Comisuras', min:-50, max:50, def:0 },
+      { id:'upperVol', label:'Volumen labio superior',  min:0, max:100, def:0 },
+      { id:'lowerVol', label:'Volumen labio inferior',  min:0, max:100, def:0 },
+      { id:'cupid',    label:'Definición arco de Cupido', min:0, max:100, def:0 },
+      { id:'corners',  label:'Comisuras (levantar)',    min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const uv = vals.upperVol/100;
-      const lv = vals.lowerVol/100;
-      const cv = vals.cupid/100;
-      const co = vals.corners/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Upper lip outer: 48,49,50,51,52,53,54
-      add(48, co*fw*0.02, co*fh*0.01, 28);
-      add(49, -uv*fw*0.008, -uv*fh*0.025, 22);
-      add(50, -cv*fw*0.005, -uv*fh*0.03, 22);
-      add(51, 0, -(uv+cv*0.5)*fh*0.035, 22);
-      add(52, cv*fw*0.005, -uv*fh*0.03, 22);
-      add(53, uv*fw*0.008, -uv*fh*0.025, 22);
-      add(54, -co*fw*0.02, co*fh*0.01, 28);
-      // Lower lip: 54,55,56,57,58,59
-      add(55, uv*fw*0.008, lv*fh*0.025, 22);
-      add(56, uv*fw*0.005, lv*fh*0.032, 22);
-      add(57, 0, lv*fh*0.04, 22);
-      add(58, -uv*fw*0.005, lv*fh*0.032, 22);
-      add(59, -uv*fw*0.008, lv*fh*0.025, 22);
+      const uv = vals.upperVol / 100;
+      const lv = vals.lowerVol / 100;
+      const cv = vals.cupid / 100;
+      const co = vals.corners / 100;
+      // Upper lip border DOWN = lip extends downward = fuller upper lip
+      // LM 49,50,51,52,53 = upper vermilion border
+      if (uv > 0) {
+        add(49,  0, uv*fh*0.012, 22);
+        add(50,  0, uv*fh*0.015, 20);
+        add(51,  0, uv*fh*0.016, 20);
+        add(52,  0, uv*fh*0.015, 20);
+        add(53,  0, uv*fh*0.012, 22);
+      }
+      // Lower lip border UP = lip extends upward = fuller lower lip
+      // LM 55,56,57,58,59 = lower vermilion border
+      if (lv > 0) {
+        add(55,  0, -lv*fh*0.012, 22);
+        add(56,  0, -lv*fh*0.014, 20);
+        add(57,  0, -lv*fh*0.016, 20);
+        add(58,  0, -lv*fh*0.014, 20);
+        add(59,  0, -lv*fh*0.012, 22);
+      }
+      // Cupid's bow: LM50 and LM52 go DOWN more to deepen the arch
+      if (cv > 0) {
+        add(50,  0, cv*fh*0.010, 16);
+        add(52,  0, cv*fh*0.010, 16);
+        add(51,  0, cv*fh*0.005, 14);  // center slightly less
+      }
+      // Corners lift: LM48, LM54 go UP (lip corners)
+      if (co > 0) {
+        add(48, -co*fw*0.006, -co*fh*0.010, 20);  // L corner UP
+        add(54,  co*fw*0.006, -co*fh*0.010, 20);  // R corner UP
+      }
       return { points, disps, sigmas };
     }
   },
@@ -558,28 +608,44 @@ const PROCEDURES = {
   chin: {
     name: 'Mentoplastia',
     sliders: [
-      { id:'projection', label:'Proyección del mentón', min:-50, max:100, def:50 },
-      { id:'chinH', label:'Altura del mentón', min:-30, max:50, def:20 },
-      { id:'width', label:'Ancho', min:-50, max:50, def:0 },
+      { id:'project',  label:'Proyección del mentón',  min:0, max:100, def:0 },
+      { id:'reduce',   label:'Reducción de mentón',    min:0, max:100, def:0 },
+      { id:'slim',     label:'Adelgazamiento mentón',  min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const pv = vals.projection/100;
-      const hv = vals.chinH/100;
-      const wv = vals.width/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Chin: landmark 8 = bottom of chin, 6,7,9,10 = jaw near chin
-      add(8, 0, pv*fh*0.05 + hv*fh*0.03, 55);
-      add(7, -wv*fw*0.02, pv*fh*0.03, 40);
-      add(9, wv*fw*0.02, pv*fh*0.03, 40);
-      add(6, -wv*fw*0.01, pv*fh*0.015, 30);
-      add(10, wv*fw*0.01, pv*fh*0.015, 30);
+      const pv = vals.project / 100;
+      const rv = vals.reduce / 100;
+      const sl = vals.slim / 100;
+      // Projection: chin goes DOWN (longer chin = more projection in 2D front)
+      if (pv > 0) {
+        add(8,  0,  pv*fh*0.030, 55);  // chin tip DOWN
+        add(7,  0,  pv*fh*0.018, 42);
+        add(9,  0,  pv*fh*0.018, 42);
+        add(6,  0,  pv*fh*0.010, 32);
+        add(10, 0,  pv*fh*0.010, 32);
+      }
+      // Reduction: chin goes UP (shorter chin)
+      if (rv > 0) {
+        add(8,  0, -rv*fh*0.022, 48);
+        add(7,  0, -rv*fh*0.014, 38);
+        add(9,  0, -rv*fh*0.014, 38);
+      }
+      // Slim: narrow chin sides inward
+      if (sl > 0) {
+        add(7,   sl*fw*0.016, 0, 36);   // L side → inward (RIGHT)
+        add(9,  -sl*fw*0.016, 0, 36);   // R side → inward (LEFT)
+        add(6,   sl*fw*0.010, 0, 28);
+        add(10, -sl*fw*0.010, 0, 28);
+      }
       return { points, disps, sigmas };
     }
   },
@@ -587,35 +653,48 @@ const PROCEDURES = {
   cheeks: {
     name: 'Bichectomía',
     sliders: [
-      { id:'reduction', label:'Reducción bolas de Bichat', min:0, max:100, def:50 },
-      { id:'cheekbone', label:'Realce pómulos', min:0, max:100, def:30 },
-      { id:'slim', label:'Adelgazamiento facial', min:0, max:100, def:20 },
+      { id:'bichat',    label:'Reducción bolas de Bichat', min:0, max:100, def:0 },
+      { id:'cheekbone', label:'Realce de pómulos',        min:0, max:100, def:0 },
+      { id:'slim',      label:'Adelgazamiento facial',    min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const rv = vals.reduction/100;
-      const cbv = vals.cheekbone/100;
-      const sl = vals.slim/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Right cheek area: landmarks 1,2,3,4,5
-      add(2, rv*fw*0.035, -rv*fh*0.02, 55);
-      add(3, rv*fw*0.04, -rv*fh*0.025, 55);
-      add(4, rv*fw*0.03, -rv*fh*0.015, 45);
-      add(5, (rv+sl)*fw*0.025, -(rv+cbv)*fh*0.03, 50);
-      // Left cheek: landmarks 11,12,13,14,15
-      add(14, -rv*fw*0.035, -rv*fh*0.02, 55);
-      add(13, -rv*fw*0.04, -rv*fh*0.025, 55);
-      add(12, -rv*fw*0.03, -rv*fh*0.015, 45);
-      add(11, -(rv+sl)*fw*0.025, -(rv+cbv)*fh*0.03, 50);
-      // Slim jaw corners
-      add(1, sl*fw*0.02, 0, 40);
-      add(15, -sl*fw*0.02, 0, 40);
+      const bv = vals.bichat / 100;
+      const cb = vals.cheekbone / 100;
+      const sl = vals.slim / 100;
+      // Bichat reduction: mid-cheek moves INWARD
+      // Right cheek (viewer left): LM 2,3,4 move RIGHT (toward center)
+      if (bv > 0) {
+        add(3,   bv*fw*0.030, -bv*fh*0.012, 56);
+        add(2,   bv*fw*0.022, -bv*fh*0.008, 50);
+        add(4,   bv*fw*0.020, -bv*fh*0.008, 48);
+        // Left cheek: LM 14,13,12 move LEFT (toward center)
+        add(13, -bv*fw*0.030, -bv*fh*0.012, 56);
+        add(14, -bv*fw*0.022, -bv*fh*0.008, 50);
+        add(12, -bv*fw*0.020, -bv*fh*0.008, 48);
+      }
+      // Cheekbone: upper cheek OUT and slightly UP
+      if (cb > 0) {
+        add(1,  -cb*fw*0.018, -cb*fh*0.020, 50);
+        add(2,  -cb*fw*0.014, -cb*fh*0.018, 46);
+        add(15,  cb*fw*0.018, -cb*fh*0.020, 50);
+        add(14,  cb*fw*0.014, -cb*fh*0.018, 46);
+      }
+      // Slim: jaw area IN
+      if (sl > 0) {
+        add(4,   sl*fw*0.018, 0, 44);
+        add(5,   sl*fw*0.014, 0, 38);
+        add(12, -sl*fw*0.018, 0, 44);
+        add(11, -sl*fw*0.014, 0, 38);
+      }
       return { points, disps, sigmas };
     }
   },
@@ -623,37 +702,51 @@ const PROCEDURES = {
   eyes: {
     name: 'Blefaroplastia',
     sliders: [
-      { id:'upperLift', label:'Levantamiento párpado sup.', min:0, max:100, def:60 },
-      { id:'lowerTight', label:'Corrección bolsas inf.', min:0, max:100, def:40 },
-      { id:'aperture', label:'Apertura ocular', min:0, max:100, def:30 },
+      { id:'upperLift',  label:'Levantamiento párpado sup.', min:0, max:100, def:0 },
+      { id:'lowerTight', label:'Corrección bolsas inf.',     min:0, max:100, def:0 },
+      { id:'canthal',    label:'Cantopexia (cola del ojo)',  min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const ul = vals.upperLift/100;
-      const lt = vals.lowerTight/100;
-      const ap = vals.aperture/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Right eye upper: 37,38 (upper lid)
-      add(37, 0, -(ul+ap)*fh*0.02, 22);
-      add(38, 0, -(ul+ap)*fh*0.02, 22);
-      // Right eye lower: 40,41 (bags)
-      add(40, 0, -lt*fh*0.015, 20);
-      add(41, 0, -lt*fh*0.015, 20);
-      // Left eye upper: 43,44
-      add(43, 0, -(ul+ap)*fh*0.02, 22);
-      add(44, 0, -(ul+ap)*fh*0.02, 22);
-      // Left eye lower: 46,47
-      add(46, 0, -lt*fh*0.015, 20);
-      add(47, 0, -lt*fh*0.015, 20);
-      // Outer corners lift
-      add(36, ul*fw*0.005, -ul*fh*0.015, 18);
-      add(45, -ul*fw*0.005, -ul*fh*0.015, 18);
+      const ul = vals.upperLift / 100;
+      const lt = vals.lowerTight / 100;
+      const ca = vals.canthal / 100;
+      // Right eye: LM 36-41 (36=outer, 39=inner, 37,38=upper lid, 40,41=lower lid)
+      if (ul > 0) {
+        add(37, 0, -ul*fh*0.012, 20);   // upper lid UP
+        add(38, 0, -ul*fh*0.012, 20);
+        add(36, 0, -ul*fh*0.006, 16);   // corners follow
+        add(39, 0, -ul*fh*0.006, 16);
+      }
+      if (lt > 0) {
+        add(40, 0, -lt*fh*0.010, 18);   // lower lid bags UP
+        add(41, 0, -lt*fh*0.008, 16);
+      }
+      if (ca > 0) {
+        add(36, -ca*fw*0.006, -ca*fh*0.008, 16); // outer corner UP+OUT
+      }
+      // Left eye: LM 42-47
+      if (ul > 0) {
+        add(43, 0, -ul*fh*0.012, 20);
+        add(44, 0, -ul*fh*0.012, 20);
+        add(42, 0, -ul*fh*0.006, 16);
+        add(45, 0, -ul*fh*0.006, 16);
+      }
+      if (lt > 0) {
+        add(46, 0, -lt*fh*0.010, 18);
+        add(47, 0, -lt*fh*0.008, 16);
+      }
+      if (ca > 0) {
+        add(45,  ca*fw*0.006, -ca*fh*0.008, 16); // outer corner UP+OUT
+      }
       return { points, disps, sigmas };
     }
   },
@@ -661,71 +754,103 @@ const PROCEDURES = {
   facelift: {
     name: 'Lifting Facial',
     sliders: [
-      { id:'jowl', label:'Corrección papada/jowls', min:0, max:100, def:60 },
-      { id:'midface', label:'Levantamiento mediofacial', min:0, max:100, def:50 },
-      { id:'neck', label:'Tensado de cuello', min:0, max:100, def:40 },
+      { id:'jowl',    label:'Corrección papada/jowls',     min:0, max:100, def:0 },
+      { id:'midface', label:'Levantamiento mediofacial',   min:0, max:100, def:0 },
+      { id:'neck',    label:'Tensado cervicofacial',       min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const jv = vals.jowl/100;
-      const mv = vals.midface/100;
-      const nv = vals.neck/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Jowl lift: jaw points 3,4,5,6,7,8,9,10,11,12,13
-      add(4, jv*fw*0.02, -jv*fh*0.035, 50);
-      add(5, jv*fw*0.015, -jv*fh*0.04, 50);
-      add(6, jv*fw*0.01, -jv*fh*0.03, 45);
-      add(7, jv*fw*0.005, -jv*fh*0.025, 40);
-      add(9, -jv*fw*0.005, -jv*fh*0.025, 40);
-      add(10, -jv*fw*0.01, -jv*fh*0.03, 45);
-      add(11, -jv*fw*0.015, -jv*fh*0.04, 50);
-      add(12, -jv*fw*0.02, -jv*fh*0.035, 50);
-      // Midface lift
-      add(1, mv*fw*0.015, -mv*fh*0.03, 55);
-      add(15, -mv*fw*0.015, -mv*fh*0.03, 55);
-      add(2, mv*fw*0.02, -mv*fh*0.025, 55);
-      add(14, -mv*fw*0.02, -mv*fh*0.025, 55);
+      const jv = vals.jowl / 100;
+      const mv = vals.midface / 100;
+      const nv = vals.neck / 100;
+      // Jowl lift: lower jaw UP and slightly IN toward ear
+      if (jv > 0) {
+        add(5,   jv*fw*0.014, -jv*fh*0.026, 50);
+        add(4,   jv*fw*0.018, -jv*fh*0.030, 52);
+        add(3,   jv*fw*0.014, -jv*fh*0.020, 46);
+        add(6,   jv*fw*0.010, -jv*fh*0.020, 46);
+        add(11, -jv*fw*0.014, -jv*fh*0.026, 50);
+        add(12, -jv*fw*0.018, -jv*fh*0.030, 52);
+        add(13, -jv*fw*0.014, -jv*fh*0.020, 46);
+        add(10, -jv*fw*0.010, -jv*fh*0.020, 46);
+      }
+      // Midface lift: cheek area UP and slightly OUT
+      if (mv > 0) {
+        add(1,  -mv*fw*0.010, -mv*fh*0.022, 56);
+        add(2,  -mv*fw*0.008, -mv*fh*0.018, 52);
+        add(15,  mv*fw*0.010, -mv*fh*0.022, 56);
+        add(14,  mv*fw*0.008, -mv*fh*0.018, 52);
+        add(3,   0,           -mv*fh*0.010, 44);
+        add(13,  0,           -mv*fh*0.010, 44);
+      }
+      // Neck: lower face lift (tightens the jaw)
+      if (nv > 0) {
+        add(7,  nv*fw*0.006, -nv*fh*0.018, 42);
+        add(9, -nv*fw*0.006, -nv*fh*0.018, 42);
+        add(8,  0,           -nv*fh*0.010, 38);
+      }
       return { points, disps, sigmas };
     }
   },
 
   brow: {
-    name: 'Botox / Lifting de Cejas',
+    name: 'Lifting de Cejas / Botox',
     sliders: [
-      { id:'browLift', label:'Levantamiento de cejas', min:0, max:100, def:60 },
-      { id:'archShape', label:'Forma del arco', min:-50, max:50, def:20 },
-      { id:'forehead', label:'Suavizado frente', min:0, max:100, def:30 },
+      { id:'browLift', label:'Elevación de cejas',      min:0, max:100, def:0 },
+      { id:'arch',     label:'Arco de la ceja',         min:0, max:100, def:0 },
+      { id:'lateral',  label:'Cola de la ceja (tail)',  min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const bl = vals.browLift/100;
-      const as_ = vals.archShape/100;
-      const ff = vals.forehead/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Right brow: 17,18,19,20,21
-      add(17, 0, -bl*fh*0.02, 25);
-      add(18, 0, -(bl+as_*0.5)*fh*0.025, 25);
-      add(19, 0, -(bl+as_)*fh*0.03, 25);
-      add(20, 0, -(bl+as_*0.5)*fh*0.025, 25);
-      add(21, 0, -bl*fh*0.02, 25);
-      // Left brow: 22,23,24,25,26
-      add(22, 0, -bl*fh*0.02, 25);
-      add(23, 0, -(bl+as_*0.5)*fh*0.025, 25);
-      add(24, 0, -(bl+as_)*fh*0.03, 25);
-      add(25, 0, -(bl+as_*0.5)*fh*0.025, 25);
-      add(26, 0, -bl*fh*0.02, 25);
+      const bl = vals.browLift / 100;
+      const ar = vals.arch / 100;
+      const la = vals.lateral / 100;
+      // Right brow: 17(inner) 18 19(peak) 20 21(outer)
+      if (bl > 0) {
+        add(17, 0, -bl*fh*0.014, 24);
+        add(18, 0, -bl*fh*0.016, 22);
+        add(19, 0, -bl*fh*0.018, 22);
+        add(20, 0, -bl*fh*0.016, 22);
+        add(21, 0, -bl*fh*0.012, 22);
+      }
+      // Arch: peak goes up more
+      if (ar > 0) {
+        add(19, 0, -ar*fh*0.014, 18);
+        add(18, 0, -ar*fh*0.008, 16);
+        add(20, 0, -ar*fh*0.008, 16);
+        add(24, 0, -ar*fh*0.014, 18);
+        add(23, 0, -ar*fh*0.008, 16);
+        add(25, 0, -ar*fh*0.008, 16);
+      }
+      // Lateral tail lift: outer brow UP and slight OUT
+      if (la > 0) {
+        add(21, -la*fw*0.008, -la*fh*0.016, 22);
+        add(26,  la*fw*0.008, -la*fh*0.016, 22);
+      }
+      // Left brow: 22(inner) 23 24(peak) 25 26(outer)
+      if (bl > 0) {
+        add(22, 0, -bl*fh*0.014, 24);
+        add(23, 0, -bl*fh*0.016, 22);
+        add(24, 0, -bl*fh*0.018, 22);
+        add(25, 0, -bl*fh*0.016, 22);
+        add(26, 0, -bl*fh*0.012, 22);
+      }
       return { points, disps, sigmas };
     }
   },
@@ -733,34 +858,47 @@ const PROCEDURES = {
   jaw: {
     name: 'Definición de Mandíbula',
     sliders: [
-      { id:'jawDef', label:'Definición mandibular', min:0, max:100, def:60 },
-      { id:'jawWidth', label:'Ancho de mandíbula', min:-50, max:50, def:-10 },
-      { id:'angle', label:'Ángulo mandibular', min:0, max:100, def:30 },
+      { id:'define',   label:'Definición mandibular',    min:0, max:100, def:0 },
+      { id:'narrow',   label:'Reducción mandibular',     min:0, max:100, def:0 },
+      { id:'angle',    label:'Énfasis ángulo mandib.',   min:0, max:100, def:0 },
     ],
     getWarpData(lm, fw, fh, vals) {
       if (!lm) return { points:[], disps:[], sigmas:[] };
       const points=[], disps=[], sigmas=[];
-      const jd = vals.jawDef/100;
-      const jw = vals.jawWidth/100;
-      const an = vals.angle/100;
-      const add = (li, dx, dy, sigma) => {
+      const sc = Math.max(fw, fh);
+      const add = (li, dx, dy, sig) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
         disps.push([dx/fw, dy/fh]);
-        sigmas.push(sigma*1.4/Math.max(fw,fh));
+        sigmas.push(sig*1.3/sc);
       };
-      // Right jaw: 0,1,2,3,4
-      add(0, (jd+an)*fw*0.02, -an*fh*0.02, 45);
-      add(1, jw*fw*0.025, -jd*fh*0.015, 40);
-      add(2, jw*fw*0.02, -jd*fh*0.01, 38);
-      add(3, jw*fw*0.01, 0, 35);
-      add(4, jw*fw*0.005, 0, 30);
-      // Left jaw: 16,15,14,13,12
-      add(16, -(jd+an)*fw*0.02, -an*fh*0.02, 45);
-      add(15, -jw*fw*0.025, -jd*fh*0.015, 40);
-      add(14, -jw*fw*0.02, -jd*fh*0.01, 38);
-      add(13, -jw*fw*0.01, 0, 35);
-      add(12, -jw*fw*0.005, 0, 30);
+      const df = vals.define / 100;
+      const nw = vals.narrow / 100;
+      const an = vals.angle / 100;
+      // Define: sharpen jaw contour (UP + slight IN for lower jaw)
+      if (df > 0) {
+        add(5,   df*fw*0.010, -df*fh*0.012, 40);
+        add(4,   df*fw*0.008, -df*fh*0.008, 36);
+        add(11, -df*fw*0.010, -df*fh*0.012, 40);
+        add(12, -df*fw*0.008, -df*fh*0.008, 36);
+      }
+      // Narrow: jaw IN (reduces jaw width) — common in V-line contouring
+      if (nw > 0) {
+        add(3,   nw*fw*0.020, 0, 38);   // L jaw → RIGHT
+        add(4,   nw*fw*0.016, 0, 34);
+        add(5,   nw*fw*0.012, 0, 30);
+        add(13, -nw*fw*0.020, 0, 38);   // R jaw → LEFT
+        add(12, -nw*fw*0.016, 0, 34);
+        add(11, -nw*fw*0.012, 0, 30);
+        add(8,   0,  nw*fh*0.010, 40);  // chin UP slightly for V-line
+      }
+      // Angle: exaggerate the jaw angle (gonial angle)
+      if (an > 0) {
+        add(0,  -an*fw*0.018, -an*fh*0.016, 40);  // R angle OUT+UP
+        add(1,  -an*fw*0.012, -an*fh*0.010, 36);
+        add(16,  an*fw*0.018, -an*fh*0.016, 40);  // L angle OUT+UP
+        add(15,  an*fw*0.012, -an*fh*0.010, 36);
+      }
       return { points, disps, sigmas };
     }
   },
@@ -782,16 +920,16 @@ const FS = `
 precision highp float;
 uniform sampler2D uTex;
 uniform int uN;
-uniform vec2 uPts[32];
-uniform vec2 uDisps[32];
-uniform float uSigs[32];
+uniform vec2 uPts[64];
+uniform vec2 uDisps[64];
+uniform float uSigs[64];
 uniform float uStr;
 varying vec2 vUV;
 void main(){
   vec2 uv = vUV;
   vec2 td = vec2(0.);
   float tw = 0.001;
-  for(int i=0;i<32;i++){
+  for(int i=0;i<64;i++){
     float act = step(float(i)+0.5, float(uN));
     vec2 d = uv - uPts[i];
     float d2 = dot(d,d);
@@ -857,13 +995,13 @@ function renderWarp(pts, disps, sigmas, strength) {
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.useProgram(prog);
   // Upload uniforms
-  const n = Math.min(pts.length, 32);
+  const n = Math.min(pts.length, 64);
   gl.uniform1i(gl.getUniformLocation(prog,'uN'), n);
   gl.uniform1f(gl.getUniformLocation(prog,'uStr'), strength);
-  // Flatten arrays
-  const pFlat = new Float32Array(64).fill(-99); // phantom pts off-screen
-  const dFlat = new Float32Array(64);
-  const sFlat = new Float32Array(32).fill(0.001); // safe sigma for phantom pts
+  // Flatten arrays — phantom pts at -99 have negligible influence
+  const pFlat = new Float32Array(128).fill(-99);
+  const dFlat = new Float32Array(128);
+  const sFlat = new Float32Array(64).fill(0.001);
   for(let i=0;i<n;i++){
     pFlat[i*2]=pts[i][0]; pFlat[i*2+1]=pts[i][1];
     dFlat[i*2]=disps[i][0]; dFlat[i*2+1]=disps[i][1];
@@ -1173,24 +1311,86 @@ function toggleLandmarks() {
 // ═══════════════════════════════════════════
 function applyEffect() {
   if (!state.originalImage) return;
-  const proc = PROCEDURES[state.currentProc];
-  const vals = state.sliderValues;
   const dw = state.imageW, dh = state.imageH;
-  let warpData;
-  if (state.landmarks && state.faceBox) {
-    warpData = proc.getWarpData(state.landmarks, dw, dh, vals);
-  } else {
-    // Fallback: estimate face center
-    const cx = dw * 0.5, cy = dh * 0.45;
-    const fakeLm = generateFakeLandmarks(cx, cy, dw, dh);
-    warpData = proc.getWarpData(fakeLm, dw, dh, vals);
+  const lm = state.landmarks || generateFakeLandmarks(dw*0.5, dh*0.45, dw, dh);
+
+  // Combine warp data from ALL selected procedures
+  const allPts = [], allDisps = [], allSigs = [];
+  for (const procId of state.selectedProcs) {
+    const proc = PROCEDURES[procId];
+    const vals = {};
+    proc.sliders.forEach(sl => { vals[sl.id] = state.sliderValues[`${procId}_${sl.id}`] ?? 0; });
+    const wd = proc.getWarpData(lm, dw, dh, vals);
+    allPts.push(...wd.points);
+    allDisps.push(...wd.disps);
+    allSigs.push(...wd.sigmas);
   }
-  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 2.0 * state.globalIntensity / 100);
-  // Copy result to after canvas
+
   const afterCtx = document.getElementById('canvasAfter').getContext('2d');
   afterCtx.clearRect(0, 0, dw, dh);
-  afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
+
+  const str = state.globalIntensity / 100;
+  if (allPts.length === 0) {
+    // No active procedures → show original photo
+    afterCtx.drawImage(state.originalImage, 0, 0, dw, dh);
+  } else {
+    renderWarp(allPts, allDisps, allSigs, str);
+    afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
+  }
+
+  // Refresh landmark overlay (original + projected)
+  if (state.showLandmarks) {
+    drawLandmarks();
+    if (allPts.length > 0) drawProjectedLandmarks(allPts, allDisps, allSigs, str, dw, dh);
+  }
   updateSplitView();
+}
+
+// Compute forward displacement at a UV point from the warp field
+function warpFieldAt(u, v, pts, disps, sigmas) {
+  let tdx = 0, tdy = 0, tw = 0.001;
+  for (let i = 0; i < pts.length; i++) {
+    const du = u - pts[i][0], dv = v - pts[i][1];
+    const s = Math.max(sigmas[i], 0.00001);
+    const w = Math.exp(-(du*du + dv*dv) / (2*s*s));
+    tdx += w * disps[i][0];
+    tdy += w * disps[i][1];
+    tw += w;
+  }
+  return [tdx/tw, tdy/tw];
+}
+
+// Draw projected landmark positions after applying the combined warp
+function drawProjectedLandmarks(pts, disps, sigmas, strength, fw, fh) {
+  if (!state.landmarks) return;
+  const ctx = document.getElementById('landmarkCanvas').getContext('2d');
+  const lm = state.landmarks;
+
+  lm.forEach((p, i) => {
+    const u = p.x/fw, v = p.y/fh;
+    const [du, dv] = warpFieldAt(u, v, pts, disps, sigmas);
+    // Forward mapping: projected = original + displacement * strength
+    const px = p.x + du * strength * fw;
+    const py = p.y + dv * strength * fh;
+    const moved = Math.hypot(px - p.x, py - p.y);
+    if (moved < 0.8) return;
+
+    ctx.save();
+    // Arrow from original to projected
+    ctx.strokeStyle = 'rgba(16,185,129,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3,2]);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(px, py); ctx.stroke();
+    ctx.setLineDash([]);
+    // Projected point
+    ctx.beginPath(); ctx.arc(px, py, 4.5, 0, Math.PI*2);
+    ctx.fillStyle = '#10b981';
+    ctx.shadowColor = '#10b981'; ctx.shadowBlur = 10;
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; ctx.fill();
+    ctx.restore();
+  });
 }
 
 function generateFakeLandmarks(cx, cy, fw, fh) {
@@ -1233,8 +1433,11 @@ function generateFakeLandmarks(cx, cy, fw, fh) {
 }
 
 function resetEffect() {
+  state.selectedProcs.clear();
+  state.sliderValues = {};
+  updateProcButtons();
   buildSliders();
-  applyEffect();
+  if (state.originalImage) applyEffect();
 }
 
 // ═══════════════════════════════════════════
@@ -1301,36 +1504,76 @@ function moveSplitDrag(e) {
 // ═══════════════════════════════════════════
 // UI CONTROLS
 // ═══════════════════════════════════════════
-function selectProcedure(proc) {
-  state.currentProc = proc;
-  document.querySelectorAll('.proc-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`[data-proc="${proc}"]`).classList.add('active');
+
+// Toggle a procedure on/off and switch the slider panel to it
+function toggleProc(procId) {
+  if (state.selectedProcs.has(procId)) {
+    state.selectedProcs.delete(procId);
+  } else {
+    state.selectedProcs.add(procId);
+    // Init sliders at 0 if not yet done
+    PROCEDURES[procId].sliders.forEach(sl => {
+      const key = `${procId}_${sl.id}`;
+      if (!(key in state.sliderValues)) state.sliderValues[key] = 0;
+    });
+  }
+  state.currentProc = procId;
+  updateProcButtons();
   buildSliders();
   if (state.originalImage) applyEffect();
 }
 
+function updateProcButtons() {
+  document.querySelectorAll('.proc-btn').forEach(btn => {
+    const p = btn.dataset.proc;
+    const sel = state.selectedProcs.has(p);
+    const foc = p === state.currentProc;
+    btn.classList.toggle('selected', sel);
+    btn.classList.toggle('active', foc);
+    btn.querySelector('.proc-check').textContent = sel ? '✓ activo' : '';
+  });
+}
+
 function buildSliders() {
   const proc = PROCEDURES[state.currentProc];
+  const procId = state.currentProc;
   const group = document.getElementById('sliderGroup');
-  state.sliderValues = {};
   group.innerHTML = '';
+
+  // Proc title + active indicator
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;';
+  const isActive = state.selectedProcs.has(procId);
+  hdr.innerHTML = `
+    <span style="font-size:0.8rem;font-weight:700;color:var(--accent2)">${proc.name}</span>
+    <span style="font-size:0.7rem;color:${isActive?'var(--green)':'var(--muted)'}">
+      ${isActive ? '● Efecto activo' : '○ Sin efecto — mueve un slider'}
+    </span>`;
+  group.appendChild(hdr);
+
   proc.sliders.forEach(sl => {
-    state.sliderValues[sl.id] = sl.def;
+    const key = `${procId}_${sl.id}`;
+    if (!(key in state.sliderValues)) state.sliderValues[key] = sl.def;
+    const curVal = state.sliderValues[key];
     const row = document.createElement('div');
     row.className = 'slider-row';
-    const val = sl.def;
     row.innerHTML = `
       <div class="slider-label">
         <span>${sl.label}</span>
-        <span class="slider-val" id="val_${sl.id}">${val}</span>
+        <span class="slider-val" id="val_${key}">${curVal}</span>
       </div>
-      <input type="range" min="${sl.min}" max="${sl.max}" value="${val}" id="sl_${sl.id}">
+      <input type="range" min="${sl.min}" max="${sl.max}" value="${curVal}" id="sl_${key}">
     `;
     group.appendChild(row);
-    const input = row.querySelector('input');
-    input.addEventListener('input', () => {
-      state.sliderValues[sl.id] = +input.value;
-      document.getElementById('val_'+sl.id).textContent = input.value;
+    row.querySelector('input').addEventListener('input', function() {
+      state.sliderValues[key] = +this.value;
+      document.getElementById(`val_${key}`).textContent = this.value;
+      // Auto-activate procedure when user moves a slider
+      if (!state.selectedProcs.has(procId)) {
+        state.selectedProcs.add(procId);
+        updateProcButtons();
+        buildSliders(); // refresh header
+      }
       if (state.originalImage) applyEffect();
     });
   });
@@ -1343,9 +1586,9 @@ document.getElementById('sl_intensity').addEventListener('input', e => {
   if (state.originalImage) applyEffect();
 });
 
-// Procedure buttons
+// Procedure buttons — toggle behavior
 document.querySelectorAll('.proc-btn').forEach(btn => {
-  btn.addEventListener('click', () => selectProcedure(btn.dataset.proc));
+  btn.addEventListener('click', () => toggleProc(btn.dataset.proc));
 });
 
 // ═══════════════════════════════════════════
@@ -1459,6 +1702,9 @@ function showToast(msg) {
 // INIT
 // ═══════════════════════════════════════════
 (async () => {
+  // Set default focused proc and build sliders (no proc selected yet)
+  state.currentProc = 'rhinoplasty';
+  updateProcButtons();
   buildSliders();
   initWebGL();
   try {
