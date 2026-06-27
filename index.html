@@ -891,31 +891,59 @@ function renderWarp(pts, disps, sigmas, strength) {
 // ═══════════════════════════════════════════
 async function loadModels() {
   const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+  // Try full (accurate) models first, fall back to tiny models
   try {
     await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
     ]);
     state.modelsLoaded = true;
+    state.useFullModels = true;
   } catch(e) {
-    console.warn('Face models failed to load:', e);
+    console.warn('Full models unavailable, loading tiny models:', e);
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+      ]);
+      state.modelsLoaded = true;
+      state.useFullModels = false;
+    } catch(e2) {
+      console.error('All models failed:', e2);
+    }
   }
 }
 
 async function detectFace(imgEl) {
   if (!state.modelsLoaded) return null;
+  setFaceStatus('detecting');
   try {
-    setFaceStatus('detecting');
-    const opts = new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.3});
-    const det = await faceapi.detectSingleFace(imgEl, opts).withFaceLandmarks(true);
-    if (det) {
-      setFaceStatus('detected');
-      return det;
+    let detections;
+    if (state.useFullModels) {
+      detections = await faceapi
+        .detectAllFaces(imgEl, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+        .withFaceLandmarks();
     } else {
-      setFaceStatus('not-detected');
-      return null;
+      detections = await faceapi
+        .detectAllFaces(imgEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 }))
+        .withFaceLandmarks(true);
     }
+    if (!detections || detections.length === 0) { setFaceStatus('not-detected'); return null; }
+
+    // Pick the largest face (most prominent subject)
+    const best = detections.reduce((a, b) =>
+      (a.detection.box.width * a.detection.box.height) >=
+      (b.detection.box.width * b.detection.box.height) ? a : b
+    );
+
+    // Reject detections that are implausibly small (< 3% of image area)
+    if ((best.detection.box.width * best.detection.box.height) < imgEl.width * imgEl.height * 0.03) {
+      setFaceStatus('not-detected'); return null;
+    }
+    setFaceStatus('detected');
+    return best;
   } catch(e) {
+    console.warn('Detection error:', e);
     setFaceStatus('not-detected');
     return null;
   }
@@ -980,26 +1008,34 @@ async function processImage(src) {
   // Also copy to after canvas initially
   const afterCtx = afterC.getContext('2d');
   afterCtx.drawImage(img, 0, 0, dw, dh);
-  // Face detection
-  const det = await detectFace(beforeC);
+  // Face detection — use a fixed 640px-wide canvas (optimal for models)
+  // then scale results once to the display canvas (dw×dh)
+  const detMaxW = 640;
+  const detScale = Math.min(1.0, detMaxW / img.width);
+  const detW = Math.round(img.width * detScale);
+  const detH = Math.round(img.height * detScale);
+  const detCanvas = document.createElement('canvas');
+  detCanvas.width = detW; detCanvas.height = detH;
+  detCanvas.getContext('2d').drawImage(img, 0, 0, detW, detH);
+
+  const det = await detectFace(detCanvas);
   if (det) {
-    const scaleX = dw / img.width;
-    const scaleY = dh / img.height;
-    state.landmarks = det.landmarks.positions.map(p => ({
-      x: p.x * scaleX, y: p.y * scaleY
-    }));
+    // Scale from detection canvas → display canvas (single scaling, no double-scale bug)
+    const sx = dw / detW;
+    const sy = dh / detH;
+    state.landmarks = det.landmarks.positions.map(p => ({ x: p.x * sx, y: p.y * sy }));
     state.faceBox = {
-      x: det.detection.box.x * scaleX,
-      y: det.detection.box.y * scaleY,
-      w: det.detection.box.width * scaleX,
-      h: det.detection.box.height * scaleY,
+      x: det.detection.box.x * sx,
+      y: det.detection.box.y * sy,
+      w: det.detection.box.width * sx,
+      h: det.detection.box.height * sy,
     };
   } else {
     state.landmarks = null;
     state.faceBox = null;
-    showToast('⚠️ No se detectó un rostro. El efecto se aplicará con estimación automática. Usa foto frontal para mejores resultados.');
+    showToast('⚠️ No se detectó un rostro. Se usará estimación automática. Usa foto frontal con buena luz.');
   }
-  // Always redraw landmarks into canvas (visible if toggle is on)
+  // Draw landmarks into canvas (visible only if toggle is on)
   drawLandmarks();
   if (state.showLandmarks) {
     document.getElementById('landmarkCanvas').style.display = 'block';
