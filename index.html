@@ -282,8 +282,8 @@ input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
 
-/* WebGL canvas */
-#glCanvas { display:none; }
+/* WebGL canvas — off-screen so drawImage can read pixels */
+#glCanvas { position:fixed; top:-9999px; left:-9999px; pointer-events:none; }
 
 /* Fade in animation */
 @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
@@ -496,11 +496,10 @@ const PROCEDURES = {
       const wv = vals.width/100;
       const pv = vals.projection/100;
       // Nose landmarks: 27(bridge top), 28,29,30(bridge), 31,32,33(tip), 34,35(nostrils)
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Tip refinement - lift and refine tip
@@ -532,11 +531,10 @@ const PROCEDURES = {
       const lv = vals.lowerVol/100;
       const cv = vals.cupid/100;
       const co = vals.corners/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Upper lip outer: 48,49,50,51,52,53,54
@@ -570,11 +568,10 @@ const PROCEDURES = {
       const pv = vals.projection/100;
       const hv = vals.chinH/100;
       const wv = vals.width/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Chin: landmark 8 = bottom of chin, 6,7,9,10 = jaw near chin
@@ -600,11 +597,10 @@ const PROCEDURES = {
       const rv = vals.reduction/100;
       const cbv = vals.cheekbone/100;
       const sl = vals.slim/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right cheek area: landmarks 1,2,3,4,5
@@ -637,11 +633,10 @@ const PROCEDURES = {
       const ul = vals.upperLift/100;
       const lt = vals.lowerTight/100;
       const ap = vals.aperture/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right eye upper: 37,38 (upper lid)
@@ -676,11 +671,10 @@ const PROCEDURES = {
       const jv = vals.jowl/100;
       const mv = vals.midface/100;
       const nv = vals.neck/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Jowl lift: jaw points 3,4,5,6,7,8,9,10,11,12,13
@@ -714,11 +708,10 @@ const PROCEDURES = {
       const bl = vals.browLift/100;
       const as_ = vals.archShape/100;
       const ff = vals.forehead/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right brow: 17,18,19,20,21
@@ -750,11 +743,10 @@ const PROCEDURES = {
       const jd = vals.jawDef/100;
       const jw = vals.jawWidth/100;
       const an = vals.angle/100;
-      const S = 3.5; // visibility scale — 3.5× baseline makes changes clearly perceptible
       const add = (li, dx, dy, sigma) => {
         const p = lm[li];
         points.push([p.x/fw, p.y/fh]);
-        disps.push([dx*S/fw, dy*S/fh]);
+        disps.push([dx/fw, dy/fh]);
         sigmas.push(sigma*1.4/Math.max(fw,fh));
       };
       // Right jaw: 0,1,2,3,4
@@ -884,6 +876,7 @@ function renderWarp(pts, disps, sigmas, strength) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, state.texture);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.flush();
 }
 
 // ═══════════════════════════════════════════
@@ -981,8 +974,6 @@ async function processImage(src) {
   const dh = Math.round(img.height * scale);
   state.imageW = dw; state.imageH = dh;
   // Setup canvases
-  const glC = document.getElementById('glCanvas');
-  glC.width = dw; glC.height = dh;
   const beforeC = document.getElementById('canvasBefore');
   beforeC.width = dw; beforeC.height = dh;
   const afterC = document.getElementById('canvasAfter');
@@ -996,10 +987,11 @@ async function processImage(src) {
   // Draw original to before canvas
   const beforeCtx = beforeC.getContext('2d');
   beforeCtx.drawImage(img, 0, 0, dw, dh);
-  // Upload to WebGL
-  if (!state.gl) initWebGL();
-  document.getElementById('glCanvas').width = dw;
-  document.getElementById('glCanvas').height = dh;
+  // Upload to WebGL — reinit each time so dimensions are always in sync
+  const glC2 = document.getElementById('glCanvas');
+  glC2.width = dw; glC2.height = dh;
+  state.gl = null; state.program = null; state.texture = null;
+  initWebGL();
   uploadTexture(beforeC);
   // Show container
   document.getElementById('emptyState').style.display = 'none';
@@ -1193,8 +1185,7 @@ function applyEffect() {
     const fakeLm = generateFakeLandmarks(cx, cy, dw, dh);
     warpData = proc.getWarpData(fakeLm, dw, dh, vals);
   }
-  // Render with WebGL — base 3.5× so effects are clearly visible
-  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 3.5 * state.globalIntensity / 100);
+  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 2.0 * state.globalIntensity / 100);
   // Copy result to after canvas
   const afterCtx = document.getElementById('canvasAfter').getContext('2d');
   afterCtx.clearRect(0, 0, dw, dh);
