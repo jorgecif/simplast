@@ -1,1610 +1,1290 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SimPlast — Simulador de Cirugía Plástica Facial</title>
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-  <style>
-    :root {
-      --blue: #2563eb;
-      --blue-dark: #1d4ed8;
-      --blue-light: #dbeafe;
-      --blue-xlight: #eff6ff;
-      --surface: #f8fafc;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --green: #059669;
-      --green-light: #d1fae5;
-      --red: #dc2626;
-      --red-light: #fee2e2;
-      --amber-light: #fef3c7;
-      --amber: #92400e;
-      --sidebar-w: 310px;
-      --radius: 10px;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AestheSim · Simulador de Cirugía Estética</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+:root {
+  --bg: #080c14;
+  --surface: #0e1420;
+  --surface2: #141c2e;
+  --border: rgba(255,255,255,0.07);
+  --accent: #6c63ff;
+  --accent2: #a78bfa;
+  --gold: #f59e0b;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --green: #10b981;
+  --red: #ef4444;
+  --radius: 14px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* HEADER */
+header {
+  background: linear-gradient(135deg, #0e1420 0%, #141c2e 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky; top:0; z-index:100;
+  backdrop-filter: blur(20px);
+}
+.logo-icon { width:36px; height:36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.logo-text { font-size:1.3rem; font-weight:700; background: linear-gradient(90deg, #fff, var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.logo-sub { font-size:0.72rem; color:var(--muted); margin-top:-2px; }
+#statusBadge { margin-left:auto; padding:4px 10px; border-radius:20px; font-size:0.72rem; font-weight:600; background:rgba(108,99,255,0.15); color:var(--accent2); border:1px solid rgba(108,99,255,0.3); white-space:nowrap; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--surface);
-      color: var(--text);
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+/* LAYOUT */
+.app-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  height: calc(100vh - 65px);
+  overflow: hidden;
+}
+@media (max-width:900px) {
+  .app-layout { grid-template-columns: 1fr; height:auto; overflow:auto; }
+}
 
-    /* ── Header ── */
-    header {
-      background: white;
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 52px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
-      z-index: 10;
-    }
-    .header-left { display: flex; align-items: center; gap: 12px; }
-    .logo {
-      font-size: 20px;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--blue), #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.5px;
-    }
-    .logo-badge {
-      font-size: 10px;
-      font-weight: 600;
-      background: var(--blue-light);
-      color: var(--blue);
-      padding: 2px 6px;
-      border-radius: 4px;
-      letter-spacing: 0.5px;
-    }
-    .header-subtitle { font-size: 12px; color: var(--text-muted); }
-    .disclaimer-badge {
-      font-size: 11px;
-      color: var(--amber);
-      background: var(--amber-light);
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-weight: 500;
-    }
+/* SIDEBAR */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  padding: 16px;
+  gap: 14px;
+}
+@media (max-width:900px) { .sidebar { border-right:none; border-bottom: 1px solid var(--border); } }
 
-    /* ── Layout ── */
-    main {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-    }
+/* UPLOAD ZONE */
+.upload-zone {
+  border: 2px dashed rgba(108,99,255,0.4);
+  border-radius: var(--radius);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: rgba(108,99,255,0.04);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(108,99,255,0.1);
+}
+.upload-zone input { display:none; }
+.upload-icon { font-size:2rem; margin-bottom:8px; }
+.upload-zone h3 { font-size:0.9rem; margin-bottom:4px; }
+.upload-zone p { font-size:0.75rem; color:var(--muted); }
+.upload-btns { display:flex; gap:8px; margin-top:12px; justify-content:center; flex-wrap:wrap; }
+.btn {
+  padding: 8px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.2s; display:flex; align-items:center; gap:6px;
+}
+.btn-primary { background: var(--accent); color:#fff; }
+.btn-primary:hover { background:#5b52d9; transform:translateY(-1px); }
+.btn-secondary { background: rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+.btn-sm { padding:6px 12px; font-size:0.75rem; }
 
-    /* ── Sidebar ── */
-    aside {
-      width: var(--sidebar-w);
-      min-width: var(--sidebar-w);
-      background: white;
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+/* PROCEDURE TABS */
+.section-title { font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
+.proc-grid { display:grid; grid-template-columns: repeat(2,1fr); gap:6px; }
+.proc-btn {
+  padding: 10px 8px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align:center;
+  transition: all 0.2s;
+  color: var(--text);
+}
+.proc-btn:hover { border-color: rgba(108,99,255,0.5); background: rgba(108,99,255,0.08); }
+.proc-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.15); color: var(--accent2); }
+.proc-btn .proc-icon { font-size:1.3rem; display:block; margin-bottom:3px; }
+.proc-btn .proc-name { font-size:0.7rem; font-weight:600; line-height:1.2; }
 
-    /* Upload zone */
-    .upload-zone {
-      margin: 14px 14px 0;
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 20px 12px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .2s ease;
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    .upload-zone:hover, .upload-zone.drag {
-      border-color: var(--blue);
-      background: var(--blue-xlight);
-    }
-    .upload-zone .upload-icon { font-size: 28px; margin-bottom: 6px; }
-    .upload-zone .upload-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-    .upload-zone .upload-hint { font-size: 11px; color: var(--text-muted); }
-    .upload-zone .upload-hint b { color: var(--blue); }
-    #fileInput { display: none; }
+/* SLIDERS */
+.slider-group { background: var(--surface2); border-radius: var(--radius); padding: 14px; border: 1px solid var(--border); }
+.slider-row { margin-bottom:10px; }
+.slider-row:last-child { margin-bottom:0; }
+.slider-label { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.slider-label span:first-child { font-size:0.78rem; font-weight:500; }
+.slider-val { font-size:0.75rem; color:var(--accent2); font-weight:700; min-width:30px; text-align:right; }
+input[type=range] {
+  -webkit-appearance:none; width:100%; height:5px;
+  border-radius:3px; background:rgba(255,255,255,0.08);
+  outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  cursor:pointer; box-shadow: 0 2px 8px rgba(108,99,255,0.5);
+}
+input[type=range]::-webkit-slider-runnable-track { border-radius:3px; }
 
-    /* Status */
-    .status-bar {
-      margin: 8px 14px 0;
-      padding: 7px 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 500;
-      display: none;
-      align-items: center;
-      gap: 7px;
-      flex-shrink: 0;
-    }
-    .status-bar.loading { display: flex; background: var(--amber-light); color: var(--amber); }
-    .status-bar.success { display: flex; background: var(--green-light); color: var(--green); }
-    .status-bar.error   { display: flex; background: var(--red-light); color: var(--red); }
+/* ACTION BTNS */
+.action-row { display:flex; gap:8px; flex-wrap:wrap; }
 
-    .spinner {
-      width: 13px; height: 13px;
-      border: 2px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      flex-shrink: 0;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+/* MAIN CANVAS AREA */
+.canvas-area {
+  display:flex; flex-direction:column;
+  background: var(--bg);
+  overflow:hidden;
+  position:relative;
+}
+.canvas-toolbar {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+}
+.view-tabs { display:flex; gap:4px; }
+.view-tab {
+  padding:5px 14px; border-radius:6px; font-size:0.78rem; font-weight:600;
+  cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--muted);
+  transition:all 0.2s;
+}
+.view-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.canvas-wrap {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  overflow:hidden; padding:16px; position:relative;
+  min-height: 400px;
+}
+.empty-state {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px; color:var(--muted); text-align:center;
+}
+.empty-state .big-icon { font-size:4rem; opacity:0.3; }
+.empty-state h2 { font-size:1.1rem; font-weight:600; color:var(--text); opacity:0.6; }
+.empty-state p { font-size:0.82rem; max-width:280px; line-height:1.5; }
 
-    /* Landmarks toggle */
-    .lm-toggle {
-      margin: 6px 14px 0;
-      display: none;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .lm-toggle.visible { display: flex; }
-    .lm-toggle input { accent-color: var(--blue); cursor: pointer; }
-    .lm-toggle label { cursor: pointer; }
+/* BEFORE/AFTER CANVAS */
+#canvasContainer {
+  position:relative; display:none;
+  border-radius: var(--radius);
+  overflow:hidden;
+  box-shadow: var(--shadow);
+  max-width:100%; max-height:100%;
+  user-select:none;
+}
+#canvasBefore, #canvasAfter {
+  display:block;
+  max-width:100%;
+  max-height:calc(100vh - 200px);
+}
+#canvasAfter { position:absolute; top:0; left:0; }
 
-    /* Procedure tabs — always visible grid */
-    .proc-tabs {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      padding: 10px 14px;
-      gap: 6px;
-      flex-shrink: 0;
-      border-bottom: 1px solid var(--border);
-    }
+/* SPLIT SLIDER */
+#splitLine {
+  position:absolute; top:0; bottom:0; width:2px;
+  background: white; cursor:ew-resize;
+  transform:translateX(-50%); z-index:10;
+  pointer-events:none;
+}
+#splitHandle {
+  position:absolute; top:50%; left:50%;
+  transform: translate(-50%,-50%);
+  width:32px; height:32px; border-radius:50%;
+  background:white; cursor:ew-resize;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  pointer-events:none; color:#333;
+}
+.split-label {
+  position:absolute; top:10px;
+  padding:3px 10px; border-radius:20px;
+  font-size:0.7rem; font-weight:700; pointer-events:none;
+  backdrop-filter:blur(8px);
+}
+#labelBefore { left:10px; background:rgba(0,0,0,0.6); color:#fff; }
+#labelAfter { right:10px; background:rgba(108,99,255,0.8); color:#fff; }
 
-    .proc-tab {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      padding: 8px 4px 7px;
-      border-radius: 9px;
-      border: 1.5px solid var(--border);
-      background: white;
-      cursor: pointer;
-      transition: all .15s ease;
-      color: var(--text-muted);
-    }
-    .proc-tab:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-xlight); }
-    .proc-tab.active {
-      background: var(--blue);
-      color: white;
-      border-color: var(--blue);
-      box-shadow: 0 2px 8px rgba(37,99,235,.3);
-    }
-    .proc-tab-emoji { font-size: 20px; line-height: 1; }
-    .proc-tab-label { font-size: 10px; font-weight: 600; text-align: center; line-height: 1.2; }
+/* LANDMARK OVERLAY */
+#landmarkCanvas {
+  position:absolute; top:0; left:0; pointer-events:none;
+  display:none;
+}
 
-    /* Sliders panel */
-    .sliders-panel {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-    }
-    .sliders-panel.disabled { opacity: .35; pointer-events: none; }
+/* LOADING */
+#loadingOverlay {
+  position:fixed; inset:0; background:rgba(8,12,20,0.9);
+  z-index:1000; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:16px;
+  backdrop-filter:blur(8px);
+}
+.spinner {
+  width:48px; height:48px; border:3px solid rgba(108,99,255,0.2);
+  border-top-color:var(--accent); border-radius:50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+#loadingOverlay p { color:var(--text); font-size:0.9rem; }
 
-    .proc-section { display: none; }
-    .proc-section.active { display: block; }
+/* FACE POINTS INDICATOR */
+.face-status {
+  display:flex; align-items:center; gap:6px;
+  font-size:0.75rem; padding:4px 10px; border-radius:20px;
+  margin-left:auto;
+}
+.face-status.detected { background:rgba(16,185,129,0.15); color:var(--green); }
+.face-status.not-detected { background:rgba(239,68,68,0.1); color:var(--red); }
+.face-status.detecting { background:rgba(245,158,11,0.1); color:var(--gold); }
+.dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
 
-    .proc-section-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 14px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-    .proc-desc {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-      line-height: 1.5;
-    }
+/* INTENSITY BADGE */
+.intensity-label {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:6px;
+}
+.badge {
+  padding:2px 8px; border-radius:10px; font-size:0.65rem; font-weight:700;
+  background:rgba(108,99,255,0.2); color:var(--accent2);
+}
 
-    .slider-group { margin-bottom: 18px; }
-    .slider-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 5px;
-    }
-    .slider-label { font-size: 12px; color: var(--text-muted); }
-    .slider-value {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--blue);
-      min-width: 30px;
-      text-align: right;
-    }
+/* TOAST */
+#toast {
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  background: var(--surface2); border:1px solid var(--border);
+  padding:10px 20px; border-radius:10px; font-size:0.82rem;
+  opacity:0; transition:opacity 0.3s; pointer-events:none;
+  z-index:2000; max-width:90vw; text-align:center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+#toast.show { opacity:1; }
 
-    input[type="range"] {
-      width: 100%;
-      height: 4px;
-      accent-color: var(--blue);
-      cursor: pointer;
-    }
+/* Camera preview */
+#cameraOverlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.95);
+  z-index:500; display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:16px;
+}
+#cameraOverlay.active { display:flex; }
+#videoEl { border-radius:12px; max-width:90vw; max-height:65vh; object-fit:cover; }
+.cam-btns { display:flex; gap:12px; }
+.btn-capture {
+  width:60px; height:60px; border-radius:50%; border:4px solid white;
+  background:rgba(255,255,255,0.1); cursor:pointer; transition:all 0.2s;
+  display:flex; align-items:center; justify-content:center; font-size:1.4rem;
+}
+.btn-capture:hover { background:rgba(255,255,255,0.3); }
+#camCanvas { display:none; }
 
-    .reset-btn {
-      width: 100%;
-      margin-top: 4px;
-      padding: 7px 0;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: white;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text-muted);
-      transition: all .15s;
-    }
-    .reset-btn:hover { background: var(--red-light); border-color: #fca5a5; color: var(--red); }
+/* Scrollbar */
+::-webkit-scrollbar { width:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
 
-    .cam-open-btn {
-      margin: 8px 14px 0;
-      width: calc(100% - 28px);
-      padding: 9px 0;
-      border: 1.5px solid var(--blue);
-      border-radius: var(--radius);
-      background: var(--blue-xlight);
-      color: var(--blue);
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all .15s;
-      flex-shrink: 0;
-    }
-    .cam-open-btn:hover { background: var(--blue); color: white; }
+/* WebGL canvas */
+#glCanvas { display:none; }
 
-    .reset-all-btn {
-      margin: 0 14px 14px;
-      width: calc(100% - 28px);
-      padding: 8px 0;
-      border: none;
-      border-radius: 8px;
-      background: #f1f5f9;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      transition: all .15s;
-      flex-shrink: 0;
-    }
-    .reset-all-btn:hover { background: var(--red-light); color: var(--red); }
-
-    /* ── Camera modal ── */
-    .cam-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      background: rgba(0,0,0,.75);
-      align-items: center;
-      justify-content: center;
-    }
-    .cam-modal.open { display: flex; }
-
-    .cam-box {
-      background: #0f172a;
-      border-radius: 16px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      max-width: 640px;
-      width: calc(100vw - 32px);
-      box-shadow: 0 24px 80px rgba(0,0,0,.6);
-    }
-
-    .cam-header {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 18px;
-      border-bottom: 1px solid rgba(255,255,255,.08);
-    }
-    .cam-header-title { color: white; font-size: 14px; font-weight: 600; }
-    .cam-close {
-      background: rgba(255,255,255,.1);
-      border: none;
-      color: white;
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      transition: background .15s;
-    }
-    .cam-close:hover { background: rgba(255,255,255,.2); }
-
-    .cam-video-wrap {
-      position: relative;
-      width: 100%;
-      background: black;
-    }
-    #camVideo {
-      width: 100%;
-      display: block;
-      transform: scaleX(-1); /* mirror for selfie */
-    }
-    #camVideo.no-mirror { transform: none; }
-
-    .cam-overlay-msg {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      text-align: center;
-      font-size: 13px;
-      pointer-events: none;
-    }
-    .cam-overlay-msg .spin-big {
-      width: 36px; height: 36px;
-      border: 3px solid rgba(255,255,255,.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-      margin: 0 auto 10px;
-    }
-
-    .cam-controls {
-      width: 100%;
-      padding: 16px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      background: #0f172a;
-    }
-
-    .cam-flip-btn {
-      background: rgba(255,255,255,.1);
-      border: none;
-      color: white;
-      width: 42px; height: 42px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 20px;
-      display: flex; align-items: center; justify-content: center;
-      transition: background .15s;
-    }
-    .cam-flip-btn:hover { background: rgba(255,255,255,.2); }
-
-    .cam-capture-btn {
-      width: 64px; height: 64px;
-      border-radius: 50%;
-      border: 4px solid white;
-      background: white;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: transform .12s, background .12s;
-      box-shadow: 0 0 0 4px rgba(255,255,255,.25);
-    }
-    .cam-capture-btn:hover { transform: scale(1.06); }
-    .cam-capture-btn:active { transform: scale(.95); background: #e2e8f0; }
-    .cam-capture-btn::after {
-      content: '';
-      width: 48px; height: 48px;
-      background: #1e293b;
-      border-radius: 50%;
-      transition: background .12s;
-    }
-    .cam-capture-btn:active::after { background: #475569; }
-
-    .cam-error {
-      padding: 20px;
-      color: #fca5a5;
-      font-size: 13px;
-      text-align: center;
-      display: none;
-    }
-    .cam-error.visible { display: block; }
-
-    /* Flash animation on capture */
-    @keyframes flash {
-      0%   { opacity: 1; }
-      100% { opacity: 0; }
-    }
-    .cam-flash {
-      position: absolute;
-      inset: 0;
-      background: white;
-      pointer-events: none;
-      opacity: 0;
-    }
-    .cam-flash.go { animation: flash .25s ease-out forwards; }
-
-    /* ── Canvas area ── */
-    .canvas-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      gap: 14px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      color: var(--text-muted);
-      text-align: center;
-      pointer-events: none;
-    }
-    .placeholder-icon { font-size: 72px; opacity: .15; }
-    .placeholder-title { font-size: 16px; font-weight: 600; color: var(--text); opacity: .5; }
-    .placeholder-sub { font-size: 13px; opacity: .5; }
-
-    .canvas-wrapper {
-      display: none;
-      position: relative;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 40px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
-    }
-
-    canvas { display: block; max-width: 100%; max-height: 100%; }
-
-    /* View controls */
-    .view-controls {
-      display: none;
-      align-items: center;
-      gap: 6px;
-    }
-    .view-controls.visible { display: flex; }
-
-    .view-btn {
-      padding: 7px 14px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: white;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-muted);
-      transition: all .15s;
-    }
-    .view-btn:hover { border-color: var(--blue); color: var(--blue); }
-    .view-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
-
-    .sep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
-
-    .export-btn {
-      padding: 7px 16px;
-      border-radius: 8px;
-      border: none;
-      background: #0f172a;
-      color: white;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      transition: opacity .15s;
-    }
-    .export-btn:hover { opacity: .75; }
-
-    /* ── Mobile responsive ── */
-    @media (max-width: 768px) {
-      /* Page scrolls naturally — avoids touch conflicts with range inputs */
-      body {
-        overflow-y: auto;
-        height: auto;
-      }
-
-      header {
-        position: sticky;
-        top: 0;
-        z-index: 20;
-        height: 44px;
-        padding: 0 12px;
-      }
-      .logo { font-size: 17px; }
-      .logo-badge, .header-subtitle { display: none; }
-      .disclaimer-badge { font-size: 10px; padding: 3px 7px; }
-
-      main {
-        flex-direction: column;
-        height: auto;
-        overflow: visible;
-      }
-
-      /* Canvas at top, fixed aspect area */
-      .canvas-area {
-        order: 1;
-        min-height: 44vw;
-        max-height: 52vh;
-        flex: 0 0 auto;
-        padding: 8px 8px 4px;
-        gap: 6px;
-        overflow: hidden;
-      }
-
-      /* Controls flow below canvas, full height, no clipping */
-      aside {
-        order: 2;
-        width: 100%;
-        min-width: unset;
-        height: auto;
-        max-height: none;
-        overflow: visible;
-        border-right: none;
-        border-top: 2px solid var(--border);
-      }
-
-      /* Sliders panel: no internal scroll, let page scroll */
-      .sliders-panel {
-        flex: none;
-        overflow: visible;
-        height: auto;
-        padding: 10px 10px 4px;
-      }
-
-      /* Compact upload row */
-      .upload-zone {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        text-align: left;
-        padding: 10px 12px;
-        margin: 10px 10px 0;
-      }
-      .upload-zone .upload-icon { font-size: 22px; flex-shrink: 0; margin-bottom: 0; }
-      .upload-zone .upload-hint:last-of-type { display: none; }
-      .upload-zone .upload-title { margin-bottom: 1px; }
-
-      .cam-open-btn {
-        margin: 6px 10px 0;
-        width: calc(100% - 20px);
-        padding: 8px 0;
-        font-size: 12px;
-      }
-
-      .status-bar { margin: 6px 10px 0; }
-      .lm-toggle  { margin: 4px 10px 0; }
-
-      .proc-tabs { padding: 8px 10px; gap: 5px; }
-      .proc-tab  { padding: 7px 2px 6px; }
-      .proc-tab-emoji { font-size: 18px; }
-      .proc-tab-label { font-size: 9px; }
-
-      .slider-group  { margin-bottom: 14px; }
-      .reset-btn { padding: 6px 0; }
-
-      .reset-all-btn {
-        margin: 0 10px 14px;
-        width: calc(100% - 20px);
-      }
-
-      .view-controls {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 5px;
-        padding-bottom: 4px;
-      }
-      .view-btn   { font-size: 11px; padding: 6px 10px; }
-      .export-btn { font-size: 11px; padding: 6px 10px; }
-    }
-
-    @media (max-width: 380px) {
-      .proc-tab-label { font-size: 8px; }
-    }
-
-    /* Loading overlay on canvas */
-    .canvas-loading {
-      position: absolute;
-      inset: 0;
-      background: rgba(255,255,255,.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      border-radius: 12px;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--blue);
-      font-weight: 600;
-    }
-    .canvas-loading.visible { display: flex; }
-    .canvas-loading .spinner { color: var(--blue); }
-  </style>
+/* Fade in animation */
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+.fade-in { animation: fadeIn 0.4s ease; }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="header-left">
-    <div class="logo">SimPlast</div>
-    <div class="logo-badge">BETA</div>
-    <div class="header-subtitle">Simulador de procedimientos estéticos faciales</div>
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Cargando modelos de detección facial...</p>
+</div>
+
+<!-- CAMERA OVERLAY -->
+<div id="cameraOverlay">
+  <video id="videoEl" autoplay playsinline muted></video>
+  <canvas id="camCanvas"></canvas>
+  <div class="cam-btns">
+    <button class="btn btn-secondary btn-sm" onclick="closeCamera()">✕ Cancelar</button>
+    <button class="btn-capture" onclick="capturePhoto()" title="Tomar foto">📸</button>
+    <button class="btn btn-secondary btn-sm" id="flipCamBtn" onclick="flipCamera()">🔄 Voltear</button>
   </div>
-  <div class="disclaimer-badge">⚠️ Solo para uso profesional médico · No reemplaza evaluación clínica</div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-icon">✦</div>
+  <div>
+    <div class="logo-text">AestheSim</div>
+    <div class="logo-sub">Simulador de Cirugía Estética · IA</div>
+  </div>
+  <div id="statusBadge">Listo</div>
 </header>
 
-<main>
-  <!-- ── Sidebar ── -->
-  <aside>
-    <div class="upload-zone" id="uploadZone">
-      <div class="upload-icon">🖼️</div>
-      <div class="upload-title">Foto del paciente</div>
-      <div class="upload-hint">Arrastra aquí o <b>haz clic</b> para seleccionar</div>
-      <div class="upload-hint" style="margin-top:3px">JPG · PNG · Vista frontal, buena luz</div>
-      <input type="file" id="fileInput" accept="image/*">
-    </div>
-    <button class="cam-open-btn" id="camOpenBtn" onclick="openCamera()">
-      📸 Tomar foto con cámara
-    </button>
+<!-- MAIN LAYOUT -->
+<div class="app-layout">
 
-    <div class="status-bar" id="statusBar">
-      <div class="spinner" id="statusSpinner" style="display:none"></div>
-      <span id="statusText"></span>
-    </div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
 
-    <div class="lm-toggle" id="lmToggle">
-      <input type="checkbox" id="showLandmarks">
-      <label for="showLandmarks">Mostrar puntos faciales detectados</label>
-    </div>
-
-    <div class="proc-tabs" id="procTabs"></div>
-
-    <div class="sliders-panel disabled" id="slidersPanel"></div>
-
-    <button class="reset-all-btn" id="resetAllBtn" onclick="resetAll()">↺ Resetear todos los ajustes</button>
-  </aside>
-
-  <!-- ── Camera modal ── -->
-  <div class="cam-modal" id="camModal">
-    <div class="cam-box">
-      <div class="cam-header">
-        <span class="cam-header-title">📸 Capturar foto del paciente</span>
-        <button class="cam-close" onclick="closeCamera()" title="Cerrar">✕</button>
-      </div>
-
-      <div class="cam-video-wrap" id="camVideoWrap">
-        <video id="camVideo" autoplay playsinline muted></video>
-        <div class="cam-flash" id="camFlash"></div>
-        <div class="cam-overlay-msg" id="camOverlayMsg">
-          <div class="spin-big"></div>
-          Iniciando cámara...
+    <!-- UPLOAD -->
+    <div>
+      <div class="section-title">1 · Cargar fotografía</div>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept="image/*">
+        <div class="upload-icon">🖼️</div>
+        <h3>Arrastra tu foto aquí</h3>
+        <p>o selecciona desde tu dispositivo</p>
+        <div class="upload-btns" onclick="event.stopPropagation()">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">📁 Galería</button>
+          <button class="btn btn-secondary btn-sm" onclick="openCamera()">📷 Cámara</button>
         </div>
       </div>
+    </div>
 
-      <div class="cam-error" id="camError">
-        <b>No se pudo acceder a la cámara.</b><br>
-        Verifica que el navegador tiene permiso para usar la cámara e intenta de nuevo.
+    <!-- PROCEDURES -->
+    <div>
+      <div class="section-title">2 · Procedimiento</div>
+      <div class="proc-grid" id="procGrid">
+        <button class="proc-btn active" data-proc="rhinoplasty">
+          <span class="proc-icon">👃</span><span class="proc-name">Rinoplastia</span>
+        </button>
+        <button class="proc-btn" data-proc="lips">
+          <span class="proc-icon">💋</span><span class="proc-name">Aumento Labios</span>
+        </button>
+        <button class="proc-btn" data-proc="chin">
+          <span class="proc-icon">🫦</span><span class="proc-name">Mentoplastia</span>
+        </button>
+        <button class="proc-btn" data-proc="cheeks">
+          <span class="proc-icon">✨</span><span class="proc-name">Bichectomía</span>
+        </button>
+        <button class="proc-btn" data-proc="eyes">
+          <span class="proc-icon">👁️</span><span class="proc-name">Blefaroplastia</span>
+        </button>
+        <button class="proc-btn" data-proc="facelift">
+          <span class="proc-icon">⬆️</span><span class="proc-name">Lifting Facial</span>
+        </button>
+        <button class="proc-btn" data-proc="brow">
+          <span class="proc-icon">🌟</span><span class="proc-name">Botox Frente</span>
+        </button>
+        <button class="proc-btn" data-proc="jaw">
+          <span class="proc-icon">💎</span><span class="proc-name">Definición Mandíbula</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div id="controlsPanel">
+      <div class="section-title">3 · Ajustes</div>
+      <div class="slider-group" id="sliderGroup">
+        <!-- Dynamic sliders here -->
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div>
+      <div class="section-title">4 · Acciones</div>
+      <div class="action-row">
+        <button class="btn btn-primary" id="btnApply" onclick="applyEffect()" style="flex:1">⚡ Aplicar</button>
+        <button class="btn btn-secondary" onclick="resetEffect()">↺ Reset</button>
+        <button class="btn btn-secondary" onclick="downloadResult()">💾</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- CANVAS AREA -->
+  <main class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="view-tabs">
+        <button class="view-tab active" onclick="setView('split')" id="tabSplit">◐ Comparar</button>
+        <button class="view-tab" onclick="setView('after')" id="tabAfter">Después</button>
+        <button class="view-tab" onclick="setView('before')" id="tabBefore">Antes</button>
+      </div>
+      <div id="faceStatus" class="face-status detecting" style="display:none">
+        <div class="dot"></div> <span id="faceStatusText">Detectando...</span>
+      </div>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <!-- EMPTY STATE -->
+      <div class="empty-state" id="emptyState">
+        <div class="big-icon">🩺</div>
+        <h2>Simula tu transformación</h2>
+        <p>Carga una fotografía frontal para visualizar los resultados de tu procedimiento estético</p>
+        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" style="margin-top:8px">
+          📁 Cargar foto ahora
+        </button>
       </div>
 
-      <div class="cam-controls">
-        <button class="cam-flip-btn" id="camFlipBtn" onclick="flipCamera()" title="Cambiar cámara">🔄</button>
-        <button class="cam-capture-btn" id="camCaptureBtn" onclick="capturePhoto()" title="Capturar foto"></button>
-        <div style="width:42px"></div><!-- spacer to balance flip button -->
+      <!-- CANVAS CONTAINER -->
+      <div id="canvasContainer">
+        <canvas id="canvasBefore"></canvas>
+        <canvas id="canvasAfter"></canvas>
+        <canvas id="landmarkCanvas"></canvas>
+        <!-- Split line -->
+        <div id="splitLine">
+          <div id="splitHandle">⟺</div>
+        </div>
+        <div class="split-label" id="labelBefore">ANTES</div>
+        <div class="split-label" id="labelAfter">DESPUÉS</div>
       </div>
-    </div>
-  </div>
 
-  <!-- ── Canvas area ── -->
-  <div class="canvas-area" id="canvasArea">
-    <div class="placeholder" id="placeholder">
-      <div class="placeholder-icon">🏥</div>
-      <div class="placeholder-title">Visualizador de resultados</div>
-      <div class="placeholder-sub">Sube una foto del paciente para comenzar</div>
+      <!-- Hidden WebGL canvas for rendering -->
+      <canvas id="glCanvas"></canvas>
     </div>
+  </main>
+</div>
 
-    <div class="canvas-wrapper" id="canvasWrapper">
-      <canvas id="mainCanvas"></canvas>
-      <div class="canvas-loading" id="canvasLoading">
-        <div class="spinner"></div>
-        Detectando rostro...
-      </div>
-    </div>
-
-    <div class="view-controls" id="viewControls">
-      <button class="view-btn active" id="btnAfter"  onclick="setView('after')">Resultado</button>
-      <button class="view-btn"        id="btnBefore" onclick="setView('before')">Original</button>
-      <button class="view-btn"        id="btnSplit"  onclick="setView('split')">Comparar ◑</button>
-      <div class="sep"></div>
-      <button class="export-btn" onclick="exportImage()">↓ Exportar PNG</button>
-    </div>
-  </div>
-</main>
+<div id="toast"></div>
 
 <script>
-// ════════════════════════════════════════════════════════════════
-// PROCEDURES DEFINITION
-// ════════════════════════════════════════════════════════════════
-// Face-api.js 68-landmark map:
-// 0-16  jaw line (left→right)
-// 17-21 left eyebrow, 22-26 right eyebrow
-// 27-30 nose bridge, 31-35 nose base/nostrils
-// 36-41 left eye, 42-47 right eye
-// 48-67 lips (48-59 outer, 60-67 inner)
-
-const PROCEDURES = {
-  rinoplastia: {
-    name: 'Rinoplastia',
-    emoji: '👃',
-    desc: 'Modifica la forma y proyección de la nariz.',
-    sliders: [
-      {
-        id: 'dorso', label: 'Reducción de dorso', min: -35, max: 10, defVal: 0,
-        controls: [
-          { idx: 27, dx: 0, dy: -0.4, sigma: 32 },
-          { idx: 28, dx: 0, dy: -1,   sigma: 38 },
-          { idx: 29, dx: 0, dy: -0.7, sigma: 34 },
-        ]
-      },
-      {
-        id: 'punta', label: 'Proyección de punta', min: -20, max: 25, defVal: 0,
-        controls: [
-          { idx: 30, dx: 0, dy: 1, sigma: 38 },
-          { idx: 33, dx: 0, dy: 0.7, sigma: 32 },
-        ]
-      },
-      {
-        id: 'ancho', label: 'Ancho de aletas', min: -20, max: 10, defVal: 0,
-        controls: [
-          { idx: 31, dx: 1,  dy: 0, sigma: 28 },
-          { idx: 35, dx: -1, dy: 0, sigma: 28 },
-          { idx: 32, dx: 0.5,  dy: 0, sigma: 22 },
-          { idx: 34, dx: -0.5, dy: 0, sigma: 22 },
-        ]
-      },
-      {
-        id: 'angulo', label: 'Ángulo naso-labial', min: -20, max: 20, defVal: 0,
-        controls: [
-          { idx: 33, dx: 0, dy: 1, sigma: 22 },
-          { idx: 32, dx: 0, dy: 0.6, sigma: 18 },
-          { idx: 34, dx: 0, dy: 0.6, sigma: 18 },
-        ]
-      },
-    ]
-  },
-
-  mentoplastia: {
-    name: 'Mentoplastia',
-    emoji: '🫦',
-    desc: 'Ajusta la proyección y el ancho del mentón.',
-    sliders: [
-      {
-        id: 'proyeccion', label: 'Proyección del mentón', min: -15, max: 25, defVal: 0,
-        controls: [
-          { idx: 8, dx: 0, dy: 1,   sigma: 52 },
-          { idx: 7, dx: 0, dy: 0.7, sigma: 40 },
-          { idx: 9, dx: 0, dy: 0.7, sigma: 40 },
-        ]
-      },
-      {
-        id: 'ancho', label: 'Ancho del mentón', min: -15, max: 20, defVal: 0,
-        controls: [
-          { idx: 7,  dx: -0.6, dy: 0, sigma: 38 },
-          { idx: 9,  dx:  0.6, dy: 0, sigma: 38 },
-          { idx: 6,  dx: -0.4, dy: 0, sigma: 32 },
-          { idx: 10, dx:  0.4, dy: 0, sigma: 32 },
-        ]
-      },
-    ]
-  },
-
-  otoplastia: {
-    name: 'Otoplastia',
-    emoji: '👂',
-    desc: 'Corrige la posición y tamaño de las orejas.',
-    sliders: [
-      {
-        id: 'rotacion', label: 'Rotación / acercamiento', min: -25, max: 5, defVal: 0,
-        controls: [
-          { idx: 0,  dx:  1,   dy: 0, sigma: 50 },
-          { idx: 16, dx: -1,   dy: 0, sigma: 50 },
-          { idx: 1,  dx:  0.6, dy: 0, sigma: 40 },
-          { idx: 15, dx: -0.6, dy: 0, sigma: 40 },
-          { idx: 2,  dx:  0.3, dy: 0, sigma: 30 },
-          { idx: 14, dx: -0.3, dy: 0, sigma: 30 },
-        ]
-      },
-      {
-        id: 'tamano', label: 'Reducción de tamaño', min: -20, max: 10, defVal: 0,
-        controls: [
-          { idx: 0,  dx:  0.6, dy:  0.4, sigma: 45 },
-          { idx: 16, dx: -0.6, dy:  0.4, sigma: 45 },
-        ]
-      },
-    ]
-  },
-
-  botox: {
-    name: 'Bótox / Rellenos',
-    emoji: '💉',
-    desc: 'Simula volumen en labios, pómulos y comisuras.',
-    sliders: [
-      {
-        id: 'labios', label: 'Volumen de labios', min: 0, max: 30, defVal: 0,
-        controls: [
-          { idx: 51, dx: 0, dy: -1,   sigma: 28 },
-          { idx: 57, dx: 0, dy:  1,   sigma: 28 },
-          { idx: 50, dx: 0, dy: -0.7, sigma: 22 },
-          { idx: 52, dx: 0, dy: -0.7, sigma: 22 },
-          { idx: 56, dx: 0, dy:  0.7, sigma: 22 },
-          { idx: 58, dx: 0, dy:  0.7, sigma: 22 },
-        ]
-      },
-      {
-        id: 'pomulos', label: 'Relleno de pómulos', min: 0, max: 25, defVal: 0,
-        controls: [
-          { idx: 1,  dx: -0.4, dy: -1,   sigma: 58 },
-          { idx: 15, dx:  0.4, dy: -1,   sigma: 58 },
-          { idx: 2,  dx: -0.6, dy: -0.8, sigma: 50 },
-          { idx: 14, dx:  0.6, dy: -0.8, sigma: 50 },
-        ]
-      },
-      {
-        id: 'comisuras', label: 'Elevación de comisuras', min: -15, max: 15, defVal: 0,
-        controls: [
-          { idx: 48, dx: -0.4, dy: -1, sigma: 22 },
-          { idx: 54, dx:  0.4, dy: -1, sigma: 22 },
-        ]
-      },
-    ]
-  },
-
-  papada: {
-    name: 'Papada',
-    emoji: '✂️',
-    desc: 'Simula reducción de grasa submentoniana y definición de perfil.',
-    sliders: [
-      {
-        id: 'reduccion', label: 'Reducción de papada', min: 0, max: 45, defVal: 0,
-        controls: [
-          { idx: 8, dx: 0, dy: -0.4, sigma: 70 },
-          { idx: 7, dx: 0, dy: -0.3, sigma: 58 },
-          { idx: 9, dx: 0, dy: -0.3, sigma: 58 },
-          { idx: 6, dx: 0, dy: -0.2, sigma: 48 },
-          { idx: 10, dx: 0, dy: -0.2, sigma: 48 },
-          // sub-chin synthetic points added at indices after landmarks
-          { idx: 'sub0', dx: 0, dy: -0.8, sigma: 55 },
-          { idx: 'sub1', dx: 0, dy: -0.6, sigma: 45 },
-        ]
-      },
-      {
-        id: 'perfil', label: 'Definición de perfil', min: 0, max: 25, defVal: 0,
-        controls: [
-          { idx: 5,  dx:  0.5, dy: -0.4, sigma: 48 },
-          { idx: 11, dx: -0.5, dy: -0.4, sigma: 48 },
-          { idx: 6,  dx:  0.3, dy: -0.2, sigma: 40 },
-          { idx: 10, dx: -0.3, dy: -0.2, sigma: 40 },
-        ]
-      },
-    ]
-  },
-};
-
-// ════════════════════════════════════════════════════════════════
-// STATE
-// ════════════════════════════════════════════════════════════════
-
+// ═══════════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════════
 const state = {
+  originalImage: null,
+  landmarks: null,
+  faceBox: null,
+  currentProc: 'rhinoplasty',
+  viewMode: 'split',
+  splitX: 0.5,
+  dragging: false,
+  gl: null,
+  program: null,
+  texture: null,
+  sliderValues: {},
+  cameraStream: null,
+  facingMode: 'user',
+  imageW: 0,
+  imageH: 0,
   modelsLoaded: false,
-  srcCanvas: null,       // offscreen canvas with scaled original
-  landmarks: null,       // [{x,y}] × 68
-  subChinPts: null,      // synthetic sub-chin points [{x,y}] with their keys
-  allPoints: null,       // landmarks + subChinPts + borderPts combined
-  subChinOffset: 0,      // index in allPoints where sub-chin points start
-  triangles: null,       // [[i,j,k]]
-  sliders: {},
-  currentView: 'after',
-  renderTimer: null,
-  showLandmarks: false,
 };
 
-// Init slider values
-for (const [pid, proc] of Object.entries(PROCEDURES)) {
-  state.sliders[pid] = {};
-  for (const s of proc.sliders) state.sliders[pid][s.id] = s.defVal;
-}
-
-const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-const RENDER_DELAY = 55; // ms debounce
-
-// ════════════════════════════════════════════════════════════════
-// DOM HELPERS
-// ════════════════════════════════════════════════════════════════
-
-const $  = id => document.getElementById(id);
-const uploadZone    = $('uploadZone');
-const fileInput     = $('fileInput');
-const statusBar     = $('statusBar');
-const statusSpinner = $('statusSpinner');
-const statusText    = $('statusText');
-const procTabs      = $('procTabs');
-const slidersPanel  = $('slidersPanel');
-const canvasWrapper = $('canvasWrapper');
-const placeholder   = $('placeholder');
-const mainCanvas    = $('mainCanvas');
-const viewControls  = $('viewControls');
-const canvasLoading = $('canvasLoading');
-const lmToggle      = $('lmToggle');
-const showLandmarksChk = $('showLandmarks');
-const ctx = mainCanvas.getContext('2d');
-
-let activeProcId = Object.keys(PROCEDURES)[0];
-
-// ════════════════════════════════════════════════════════════════
-// STATUS
-// ════════════════════════════════════════════════════════════════
-
-function setStatus(type, text) {
-  statusBar.className = 'status-bar ' + type;
-  statusSpinner.style.display = type === 'loading' ? 'block' : 'none';
-  statusText.textContent = text;
-}
-
-// ════════════════════════════════════════════════════════════════
-// BUILD UI
-// ════════════════════════════════════════════════════════════════
-
-function buildUI() {
-  // Tabs — grid cards with emoji + name
-  procTabs.innerHTML = '';
-  Object.entries(PROCEDURES).forEach(([pid, proc]) => {
-    const btn = document.createElement('button');
-    btn.className = 'proc-tab' + (pid === activeProcId ? ' active' : '');
-    btn.innerHTML = `<span class="proc-tab-emoji">${proc.emoji}</span><span class="proc-tab-label">${proc.name}</span>`;
-    btn.onclick = () => switchProc(pid);
-    procTabs.appendChild(btn);
-  });
-
-  // Panels
-  slidersPanel.innerHTML = '';
-  Object.entries(PROCEDURES).forEach(([pid, proc]) => {
-    const section = document.createElement('div');
-    section.className = 'proc-section' + (pid === activeProcId ? ' active' : '');
-    section.id = 'psec-' + pid;
-
-    const title = document.createElement('div');
-    title.className = 'proc-section-title';
-    title.textContent = proc.emoji + '  ' + proc.name;
-    section.appendChild(title);
-
-    if (proc.desc) {
-      const desc = document.createElement('div');
-      desc.className = 'proc-desc';
-      desc.textContent = proc.desc;
-      section.appendChild(desc);
-    }
-
-    proc.sliders.forEach(sl => {
-      const group = document.createElement('div');
-      group.className = 'slider-group';
-
-      const row = document.createElement('div');
-      row.className = 'slider-row';
-
-      const lbl = document.createElement('span');
-      lbl.className = 'slider-label';
-      lbl.textContent = sl.label;
-
-      const valSpan = document.createElement('span');
-      valSpan.className = 'slider-value';
-      valSpan.id = `val-${pid}-${sl.id}`;
-      valSpan.textContent = sl.defVal;
-
-      row.appendChild(lbl);
-      row.appendChild(valSpan);
-
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.min = sl.min;
-      input.max = sl.max;
-      input.step = 1;
-      input.value = sl.defVal;
-      input.id = `sl-${pid}-${sl.id}`;
-      input.oninput = () => {
-        const v = parseInt(input.value);
-        state.sliders[pid][sl.id] = v;
-        valSpan.textContent = v > 0 ? '+' + v : String(v);
-        scheduleRender();
+// ═══════════════════════════════════════════
+// PROCEDURE DEFINITIONS
+// ═══════════════════════════════════════════
+const PROCEDURES = {
+  rhinoplasty: {
+    name: 'Rinoplastia',
+    sliders: [
+      { id:'tipRef', label:'Refinamiento de punta', min:0, max:100, def:50 },
+      { id:'bridge', label:'Perfil del puente', min:-50, max:50, def:0 },
+      { id:'width', label:'Estrechar fosas nasales', min:0, max:100, def:40 },
+      { id:'projection', label:'Proyección', min:-50, max:50, def:0 },
+    ],
+    // Returns control points and displacements in NORMALIZED coords (0..1 relative to face bbox)
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const tip = vals.tipRef/100;
+      const bv = vals.bridge/100;
+      const wv = vals.width/100;
+      const pv = vals.projection/100;
+      // Nose landmarks: 27(bridge top), 28,29,30(bridge), 31,32,33(tip), 34,35(nostrils)
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
       };
-
-      group.appendChild(row);
-      group.appendChild(input);
-      section.appendChild(group);
-    });
-
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'reset-btn';
-    resetBtn.textContent = '↺ Resetear ' + proc.name;
-    resetBtn.onclick = () => resetProc(pid);
-    section.appendChild(resetBtn);
-
-    slidersPanel.appendChild(section);
-  });
-}
-
-function switchProc(pid) {
-  activeProcId = pid;
-  procTabs.querySelectorAll('.proc-tab').forEach((t, i) => {
-    t.classList.toggle('active', Object.keys(PROCEDURES)[i] === pid);
-  });
-  slidersPanel.querySelectorAll('.proc-section').forEach(s => {
-    s.classList.toggle('active', s.id === 'psec-' + pid);
-  });
-}
-
-function resetProc(pid) {
-  for (const sl of PROCEDURES[pid].sliders) {
-    state.sliders[pid][sl.id] = sl.defVal;
-    const inp = $(`sl-${pid}-${sl.id}`);
-    const val = $(`val-${pid}-${sl.id}`);
-    if (inp) inp.value = sl.defVal;
-    if (val) val.textContent = sl.defVal;
-  }
-  scheduleRender();
-}
-
-function resetAll() {
-  for (const pid of Object.keys(PROCEDURES)) resetProc(pid);
-}
-
-// ════════════════════════════════════════════════════════════════
-// FILE UPLOAD
-// ════════════════════════════════════════════════════════════════
-
-uploadZone.onclick = () => fileInput.click();
-uploadZone.ondragover = e => { e.preventDefault(); uploadZone.classList.add('drag'); };
-uploadZone.ondragleave = () => uploadZone.classList.remove('drag');
-uploadZone.ondrop = e => {
-  e.preventDefault(); uploadZone.classList.remove('drag');
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) loadFile(f);
-};
-fileInput.onchange = () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); };
-
-function loadFile(file) {
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => { URL.revokeObjectURL(url); processImage(img); };
-  img.src = url;
-}
-
-// ════════════════════════════════════════════════════════════════
-// IMAGE PROCESSING & FACE DETECTION
-// ════════════════════════════════════════════════════════════════
-
-async function processImage(img) {
-  if (!state.modelsLoaded) {
-    setStatus('error', 'Modelos aún cargando, espera un momento...');
-    return;
-  }
-
-  // Show canvas area
-  placeholder.style.display = 'none';
-  canvasWrapper.style.display = 'block';
-  canvasLoading.classList.add('visible');
-  viewControls.classList.remove('visible');
-  lmToggle.classList.remove('visible');
-
-  // Fit to available space
-  const areaEl = $('canvasArea');
-  const maxW = areaEl.clientWidth - 40;
-  const maxH = areaEl.clientHeight - 80;
-  const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
-  const W = Math.round(img.naturalWidth * scale);
-  const H = Math.round(img.naturalHeight * scale);
-
-  mainCanvas.width = W;
-  mainCanvas.height = H;
-
-  // Draw scaled image to offscreen
-  const off = document.createElement('canvas');
-  off.width = W; off.height = H;
-  off.getContext('2d').drawImage(img, 0, 0, W, H);
-  state.srcCanvas = off;
-
-  // Detect face
-  let detections;
-  try {
-    detections = await faceapi
-      .detectAllFaces(off, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.35 }))
-      .withFaceLandmarks();
-  } catch (err) {
-    console.error(err);
-    setStatus('error', 'Error en detección. Intenta con otra foto.');
-    canvasLoading.classList.remove('visible');
-    ctx.drawImage(off, 0, 0);
-    return;
-  }
-
-  canvasLoading.classList.remove('visible');
-
-  if (!detections || detections.length === 0) {
-    setStatus('error', 'No se detectó un rostro. Usa foto frontal con buena iluminación.');
-    ctx.drawImage(off, 0, 0);
-    return;
-  }
-
-  const msg = detections.length > 1
-    ? `${detections.length} rostros detectados · Usando el primero`
-    : 'Rostro detectado correctamente · Ajusta los controles';
-  setStatus('success', msg);
-
-  state.landmarks = detections[0].landmarks.positions.map(p => ({ x: p.x, y: p.y }));
-
-  buildMesh(W, H);
-
-  slidersPanel.classList.remove('disabled');
-  viewControls.classList.add('visible');
-  lmToggle.classList.add('visible');
-  state.currentView = 'after';
-  syncViewButtons();
-  renderAfter();
-}
-
-// ════════════════════════════════════════════════════════════════
-// MESH BUILDING
-// ════════════════════════════════════════════════════════════════
-
-function buildMesh(W, H) {
-  const lm = state.landmarks;
-  const chin = lm[8];
-
-  // Sub-chin synthetic points for papada effect
-  const subChin = [
-    { key: 'sub0', x: chin.x, y: Math.min(H - 1, chin.y + 35) },
-    { key: 'sub1', x: chin.x, y: Math.min(H - 1, chin.y + 70) },
-    { key: 'sub2', x: chin.x - 50, y: Math.min(H - 1, chin.y + 50) },
-    { key: 'sub3', x: chin.x + 50, y: Math.min(H - 1, chin.y + 50) },
-  ].filter(p => p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H);
-
-  state.subChinPts = subChin;
-  state.subChinOffset = lm.length; // sub-chin starts after 68 landmarks
-
-  const borderPts = [
-    { x: 0,   y: 0   }, { x: W/2, y: 0   }, { x: W,   y: 0   },
-    { x: W,   y: H/2 }, { x: W,   y: H   },
-    { x: W/2, y: H   }, { x: 0,   y: H   }, { x: 0,   y: H/2 },
-    { x: W/4, y: 0   }, { x: 3*W/4, y: 0 },
-    { x: W,   y: H/4 }, { x: W, y: 3*H/4 },
-    { x: 3*W/4, y: H }, { x: W/4, y: H   },
-    { x: 0, y: H/4   }, { x: 0, y: 3*H/4 },
-  ];
-
-  state.allPoints = [
-    ...lm,
-    ...subChin.map(p => ({ x: p.x, y: p.y })),
-    ...borderPts,
-  ];
-
-  state.triangles = bowyerWatson(state.allPoints);
-}
-
-// ════════════════════════════════════════════════════════════════
-// BOWYER-WATSON DELAUNAY TRIANGULATION
-// ════════════════════════════════════════════════════════════════
-
-function bowyerWatson(points) {
-  const n = points.length;
-
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-
-  const span = Math.max(maxX - minX, maxY - minY) * 3;
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-
-  const sA = n,   pA = { x: cx - span * 10, y: cy - span };
-  const sB = n+1, pB = { x: cx,              y: cy + span * 10 };
-  const sC = n+2, pC = { x: cx + span * 10,  y: cy - span };
-  const pts = [...points, pA, pB, pC];
-
-  let tris = [{ a: sA, b: sC, c: sB }]; // CCW winding required for circumcircle test
-
-  for (let i = 0; i < n; i++) {
-    const p = pts[i];
-    const bad = tris.filter(t => inCircumcircle(pts[t.a], pts[t.b], pts[t.c], p));
-
-    const polygon = [];
-    for (const bt of bad) {
-      const edges = [[bt.a, bt.b], [bt.b, bt.c], [bt.c, bt.a]];
-      for (const e of edges) {
-        const shared = bad.some(o => o !== bt && triHasEdge(o, e[0], e[1]));
-        if (!shared) polygon.push(e);
-      }
+      // Tip refinement - lift and refine tip
+      add(33, pv * fw*0.03, -tip * fh*0.04, 40);
+      // Bridge straightening
+      add(28, bv > 0 ? -bv*fw*0.015 : 0, bv > 0 ? bv*fh*0.02 : bv*fh*0.01, 35);
+      add(29, bv*fw*0.01, bv > 0 ? bv*fh*0.015 : 0, 30);
+      // Nostril narrowing
+      add(31, wv*fw*0.03, 0, 35);
+      add(35, -wv*fw*0.03, 0, 35);
+      add(32, wv*fw*0.015, tip*fh*0.01, 28);
+      add(34, -wv*fw*0.015, tip*fh*0.01, 28);
+      return { points, disps, sigmas };
     }
+  },
 
-    tris = tris.filter(t => !bad.includes(t));
-    for (const e of polygon) tris.push({ a: e[0], b: e[1], c: i });
-  }
-
-  // Remove super-triangle vertices
-  return tris
-    .filter(t => t.a < n && t.b < n && t.c < n)
-    .map(t => [t.a, t.b, t.c]);
-}
-
-function inCircumcircle(a, b, c, p) {
-  const ax = a.x - p.x, ay = a.y - p.y;
-  const bx = b.x - p.x, by = b.y - p.y;
-  const cx = c.x - p.x, cy = c.y - p.y;
-  return (ax*ax + ay*ay) * (bx*cy - by*cx)
-       - (bx*bx + by*by) * (ax*cy - ay*cx)
-       + (cx*cx + cy*cy) * (ax*by - ay*bx) > 0;
-}
-
-function triHasEdge(t, a, b) {
-  return (t.a===a&&t.b===b)||(t.b===a&&t.c===b)||(t.c===a&&t.a===b)
-       ||(t.a===b&&t.b===a)||(t.b===b&&t.c===a)||(t.c===b&&t.a===a);
-}
-
-// ════════════════════════════════════════════════════════════════
-// DISPLACEMENT COMPUTATION
-// ════════════════════════════════════════════════════════════════
-
-function computeDisplacements() {
-  const pts = state.allPoints;
-  const n = pts.length;
-  const disp = Array.from({ length: n }, () => ({ x: 0, y: 0 }));
-
-  for (const [pid, proc] of Object.entries(PROCEDURES)) {
-    for (const sl of proc.sliders) {
-      const value = state.sliders[pid][sl.id];
-      if (value === 0) continue;
-
-      for (const ctrl of sl.controls) {
-        // Resolve control point position
-        let srcPt;
-        if (typeof ctrl.idx === 'string') {
-          // synthetic sub-chin point
-          const found = state.subChinPts.find(p => p.key === ctrl.idx);
-          if (!found) continue;
-          srcPt = found;
-        } else {
-          if (ctrl.idx >= state.landmarks.length) continue;
-          srcPt = state.landmarks[ctrl.idx];
-        }
-
-        const sigma2 = ctrl.sigma * ctrl.sigma * 2;
-        for (let i = 0; i < n; i++) {
-          const ddx = pts[i].x - srcPt.x;
-          const ddy = pts[i].y - srcPt.y;
-          const w = Math.exp(-(ddx*ddx + ddy*ddy) / sigma2);
-          disp[i].x += ctrl.dx * value * w;
-          disp[i].y += ctrl.dy * value * w;
-        }
-      }
+  lips: {
+    name: 'Aumento de Labios',
+    sliders: [
+      { id:'upperVol', label:'Volumen labio superior', min:0, max:100, def:50 },
+      { id:'lowerVol', label:'Volumen labio inferior', min:0, max:100, def:40 },
+      { id:'cupid', label:'Arco de Cupido', min:0, max:100, def:30 },
+      { id:'corners', label:'Comisuras', min:-50, max:50, def:0 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const uv = vals.upperVol/100;
+      const lv = vals.lowerVol/100;
+      const cv = vals.cupid/100;
+      const co = vals.corners/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Upper lip outer: 48,49,50,51,52,53,54
+      add(48, co*fw*0.02, co*fh*0.01, 28);
+      add(49, -uv*fw*0.008, -uv*fh*0.025, 22);
+      add(50, -cv*fw*0.005, -uv*fh*0.03, 22);
+      add(51, 0, -(uv+cv*0.5)*fh*0.035, 22);
+      add(52, cv*fw*0.005, -uv*fh*0.03, 22);
+      add(53, uv*fw*0.008, -uv*fh*0.025, 22);
+      add(54, -co*fw*0.02, co*fh*0.01, 28);
+      // Lower lip: 54,55,56,57,58,59
+      add(55, uv*fw*0.008, lv*fh*0.025, 22);
+      add(56, uv*fw*0.005, lv*fh*0.032, 22);
+      add(57, 0, lv*fh*0.04, 22);
+      add(58, -uv*fw*0.005, lv*fh*0.032, 22);
+      add(59, -uv*fw*0.008, lv*fh*0.025, 22);
+      return { points, disps, sigmas };
     }
-  }
+  },
 
-  return disp;
-}
-
-// ════════════════════════════════════════════════════════════════
-// RENDERING
-// ════════════════════════════════════════════════════════════════
-
-function scheduleRender() {
-  if (state.renderTimer) clearTimeout(state.renderTimer);
-  state.renderTimer = setTimeout(() => {
-    if (state.currentView !== 'before') renderAfter();
-  }, RENDER_DELAY);
-}
-
-function renderAfter() {
-  if (!state.landmarks) return;
-
-  const disp = computeDisplacements();
-  const src = state.allPoints;
-  const dst = src.map((p, i) => ({ x: p.x + disp[i].x, y: p.y + disp[i].y }));
-
-  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-
-  if (state.currentView === 'split') {
-    const mid = mainCanvas.width / 2;
-
-    // Left: original
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, 0, mid, mainCanvas.height); ctx.clip();
-    ctx.drawImage(state.srcCanvas, 0, 0);
-    ctx.restore();
-
-    // Right: warped
-    ctx.save();
-    ctx.beginPath(); ctx.rect(mid, 0, mid, mainCanvas.height); ctx.clip();
-    warpMesh(src, dst);
-    ctx.restore();
-
-    // Divider
-    ctx.save();
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 5]);
-    ctx.shadowColor = 'rgba(0,0,0,.4)';
-    ctx.shadowBlur = 4;
-    ctx.beginPath();
-    ctx.moveTo(mid, 0); ctx.lineTo(mid, mainCanvas.height);
-    ctx.stroke();
-    ctx.restore();
-
-    // Labels
-    drawLabel(ctx, 'Original',  14, 12);
-    drawLabel(ctx, 'Resultado', mid + 14, 12);
-  } else {
-    warpMesh(src, dst);
-  }
-
-  if (state.showLandmarks) overlayLandmarks();
-}
-
-function drawLabel(ctx, text, x, y) {
-  ctx.save();
-  ctx.font = '600 11px -apple-system, sans-serif';
-  const w = ctx.measureText(text).width;
-  ctx.fillStyle = 'rgba(0,0,0,.55)';
-  ctx.beginPath();
-  ctx.roundRect(x - 5, y, w + 10, 20, 4);
-  ctx.fill();
-  ctx.fillStyle = 'white';
-  ctx.fillText(text, x, y + 14);
-  ctx.restore();
-}
-
-function renderBefore() {
-  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-  ctx.drawImage(state.srcCanvas, 0, 0);
-  if (state.showLandmarks) overlayLandmarks();
-}
-
-function warpMesh(srcPts, dstPts) {
-  for (const [ai, bi, ci] of state.triangles) {
-    drawWarpedTri(
-      srcPts[ai], srcPts[bi], srcPts[ci],
-      dstPts[ai], dstPts[bi], dstPts[ci]
-    );
-  }
-}
-
-function drawWarpedTri(sA, sB, sC, dA, dB, dC) {
-  const M = affineTransform([sA, sB, sC], [dA, dB, dC]);
-  if (!M) return;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(dA.x, dA.y);
-  ctx.lineTo(dB.x, dB.y);
-  ctx.lineTo(dC.x, dC.y);
-  ctx.closePath();
-  ctx.clip();
-  ctx.setTransform(M[0], M[1], M[2], M[3], M[4], M[5]);
-  ctx.drawImage(state.srcCanvas, 0, 0);
-  ctx.restore();
-}
-
-// Compute canvas affine transform: source triangle → destination triangle
-// Canvas setTransform(a,b,c,d,e,f):
-//   canvas_x = a*img_x + c*img_y + e
-//   canvas_y = b*img_x + d*img_y + f
-function affineTransform(src, dst) {
-  const [s0, s1, s2] = src;
-  const [d0, d1, d2] = dst;
-  const A = [[s0.x, s0.y, 1], [s1.x, s1.y, 1], [s2.x, s2.y, 1]];
-  const xc = solve3(A, [d0.x, d1.x, d2.x]);
-  const yc = solve3(A, [d0.y, d1.y, d2.y]);
-  if (!xc || !yc) return null;
-  return [xc[0], yc[0], xc[1], yc[1], xc[2], yc[2]];
-}
-
-function solve3(A, b) {
-  // Gaussian elimination with partial pivoting
-  const M = A.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < 3; col++) {
-    let pivot = col;
-    for (let r = col + 1; r < 3; r++)
-      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
-    [M[col], M[pivot]] = [M[pivot], M[col]];
-    if (Math.abs(M[col][col]) < 1e-10) return null;
-    for (let r = col + 1; r < 3; r++) {
-      const f = M[r][col] / M[col][col];
-      for (let j = col; j <= 3; j++) M[r][j] -= f * M[col][j];
+  chin: {
+    name: 'Mentoplastia',
+    sliders: [
+      { id:'projection', label:'Proyección del mentón', min:-50, max:100, def:50 },
+      { id:'chinH', label:'Altura del mentón', min:-30, max:50, def:20 },
+      { id:'width', label:'Ancho', min:-50, max:50, def:0 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const pv = vals.projection/100;
+      const hv = vals.chinH/100;
+      const wv = vals.width/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Chin: landmark 8 = bottom of chin, 6,7,9,10 = jaw near chin
+      add(8, 0, pv*fh*0.05 + hv*fh*0.03, 55);
+      add(7, -wv*fw*0.02, pv*fh*0.03, 40);
+      add(9, wv*fw*0.02, pv*fh*0.03, 40);
+      add(6, -wv*fw*0.01, pv*fh*0.015, 30);
+      add(10, wv*fw*0.01, pv*fh*0.015, 30);
+      return { points, disps, sigmas };
     }
-  }
-  const x = [0, 0, 0];
-  for (let i = 2; i >= 0; i--) {
-    x[i] = M[i][3];
-    for (let j = i + 1; j < 3; j++) x[i] -= M[i][j] * x[j];
-    x[i] /= M[i][i];
-  }
-  return x;
-}
+  },
 
-function overlayLandmarks() {
-  if (!state.landmarks) return;
-  ctx.save();
-  state.landmarks.forEach((p, i) => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(37,99,235,0.85)';
-    ctx.fill();
-  });
-  ctx.restore();
-}
+  cheeks: {
+    name: 'Bichectomía',
+    sliders: [
+      { id:'reduction', label:'Reducción bolas de Bichat', min:0, max:100, def:50 },
+      { id:'cheekbone', label:'Realce pómulos', min:0, max:100, def:30 },
+      { id:'slim', label:'Adelgazamiento facial', min:0, max:100, def:20 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const rv = vals.reduction/100;
+      const cbv = vals.cheekbone/100;
+      const sl = vals.slim/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Right cheek area: landmarks 1,2,3,4,5
+      add(2, rv*fw*0.035, -rv*fh*0.02, 55);
+      add(3, rv*fw*0.04, -rv*fh*0.025, 55);
+      add(4, rv*fw*0.03, -rv*fh*0.015, 45);
+      add(5, (rv+sl)*fw*0.025, -(rv+cbv)*fh*0.03, 50);
+      // Left cheek: landmarks 11,12,13,14,15
+      add(14, -rv*fw*0.035, -rv*fh*0.02, 55);
+      add(13, -rv*fw*0.04, -rv*fh*0.025, 55);
+      add(12, -rv*fw*0.03, -rv*fh*0.015, 45);
+      add(11, -(rv+sl)*fw*0.025, -(rv+cbv)*fh*0.03, 50);
+      // Slim jaw corners
+      add(1, sl*fw*0.02, 0, 40);
+      add(15, -sl*fw*0.02, 0, 40);
+      return { points, disps, sigmas };
+    }
+  },
 
-// ════════════════════════════════════════════════════════════════
-// VIEW CONTROLS
-// ════════════════════════════════════════════════════════════════
+  eyes: {
+    name: 'Blefaroplastia',
+    sliders: [
+      { id:'upperLift', label:'Levantamiento párpado sup.', min:0, max:100, def:60 },
+      { id:'lowerTight', label:'Corrección bolsas inf.', min:0, max:100, def:40 },
+      { id:'aperture', label:'Apertura ocular', min:0, max:100, def:30 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const ul = vals.upperLift/100;
+      const lt = vals.lowerTight/100;
+      const ap = vals.aperture/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Right eye upper: 37,38 (upper lid)
+      add(37, 0, -(ul+ap)*fh*0.02, 22);
+      add(38, 0, -(ul+ap)*fh*0.02, 22);
+      // Right eye lower: 40,41 (bags)
+      add(40, 0, -lt*fh*0.015, 20);
+      add(41, 0, -lt*fh*0.015, 20);
+      // Left eye upper: 43,44
+      add(43, 0, -(ul+ap)*fh*0.02, 22);
+      add(44, 0, -(ul+ap)*fh*0.02, 22);
+      // Left eye lower: 46,47
+      add(46, 0, -lt*fh*0.015, 20);
+      add(47, 0, -lt*fh*0.015, 20);
+      // Outer corners lift
+      add(36, ul*fw*0.005, -ul*fh*0.015, 18);
+      add(45, -ul*fw*0.005, -ul*fh*0.015, 18);
+      return { points, disps, sigmas };
+    }
+  },
 
-function setView(v) {
-  state.currentView = v;
-  syncViewButtons();
-  if (v === 'before') renderBefore(); else renderAfter();
-}
+  facelift: {
+    name: 'Lifting Facial',
+    sliders: [
+      { id:'jowl', label:'Corrección papada/jowls', min:0, max:100, def:60 },
+      { id:'midface', label:'Levantamiento mediofacial', min:0, max:100, def:50 },
+      { id:'neck', label:'Tensado de cuello', min:0, max:100, def:40 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const jv = vals.jowl/100;
+      const mv = vals.midface/100;
+      const nv = vals.neck/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Jowl lift: jaw points 3,4,5,6,7,8,9,10,11,12,13
+      add(4, jv*fw*0.02, -jv*fh*0.035, 50);
+      add(5, jv*fw*0.015, -jv*fh*0.04, 50);
+      add(6, jv*fw*0.01, -jv*fh*0.03, 45);
+      add(7, jv*fw*0.005, -jv*fh*0.025, 40);
+      add(9, -jv*fw*0.005, -jv*fh*0.025, 40);
+      add(10, -jv*fw*0.01, -jv*fh*0.03, 45);
+      add(11, -jv*fw*0.015, -jv*fh*0.04, 50);
+      add(12, -jv*fw*0.02, -jv*fh*0.035, 50);
+      // Midface lift
+      add(1, mv*fw*0.015, -mv*fh*0.03, 55);
+      add(15, -mv*fw*0.015, -mv*fh*0.03, 55);
+      add(2, mv*fw*0.02, -mv*fh*0.025, 55);
+      add(14, -mv*fw*0.02, -mv*fh*0.025, 55);
+      return { points, disps, sigmas };
+    }
+  },
 
-function syncViewButtons() {
-  $('btnAfter').classList.toggle('active',  state.currentView === 'after');
-  $('btnBefore').classList.toggle('active', state.currentView === 'before');
-  $('btnSplit').classList.toggle('active',  state.currentView === 'split');
-}
+  brow: {
+    name: 'Botox / Lifting de Cejas',
+    sliders: [
+      { id:'browLift', label:'Levantamiento de cejas', min:0, max:100, def:60 },
+      { id:'archShape', label:'Forma del arco', min:-50, max:50, def:20 },
+      { id:'forehead', label:'Suavizado frente', min:0, max:100, def:30 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const bl = vals.browLift/100;
+      const as_ = vals.archShape/100;
+      const ff = vals.forehead/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Right brow: 17,18,19,20,21
+      add(17, 0, -bl*fh*0.02, 25);
+      add(18, 0, -(bl+as_*0.5)*fh*0.025, 25);
+      add(19, 0, -(bl+as_)*fh*0.03, 25);
+      add(20, 0, -(bl+as_*0.5)*fh*0.025, 25);
+      add(21, 0, -bl*fh*0.02, 25);
+      // Left brow: 22,23,24,25,26
+      add(22, 0, -bl*fh*0.02, 25);
+      add(23, 0, -(bl+as_*0.5)*fh*0.025, 25);
+      add(24, 0, -(bl+as_)*fh*0.03, 25);
+      add(25, 0, -(bl+as_*0.5)*fh*0.025, 25);
+      add(26, 0, -bl*fh*0.02, 25);
+      return { points, disps, sigmas };
+    }
+  },
 
-showLandmarksChk.onchange = () => {
-  state.showLandmarks = showLandmarksChk.checked;
-  if (state.currentView === 'before') renderBefore(); else renderAfter();
+  jaw: {
+    name: 'Definición de Mandíbula',
+    sliders: [
+      { id:'jawDef', label:'Definición mandibular', min:0, max:100, def:60 },
+      { id:'jawWidth', label:'Ancho de mandíbula', min:-50, max:50, def:-10 },
+      { id:'angle', label:'Ángulo mandibular', min:0, max:100, def:30 },
+    ],
+    getWarpData(lm, fw, fh, vals) {
+      if (!lm) return { points:[], disps:[], sigmas:[] };
+      const points=[], disps=[], sigmas=[];
+      const jd = vals.jawDef/100;
+      const jw = vals.jawWidth/100;
+      const an = vals.angle/100;
+      const add = (li, dx, dy, sigma) => {
+        const p = lm[li];
+        points.push([p.x/fw, p.y/fh]);
+        disps.push([dx/fw, dy/fh]);
+        sigmas.push(sigma/Math.max(fw,fh));
+      };
+      // Right jaw: 0,1,2,3,4
+      add(0, (jd+an)*fw*0.02, -an*fh*0.02, 45);
+      add(1, jw*fw*0.025, -jd*fh*0.015, 40);
+      add(2, jw*fw*0.02, -jd*fh*0.01, 38);
+      add(3, jw*fw*0.01, 0, 35);
+      add(4, jw*fw*0.005, 0, 30);
+      // Left jaw: 16,15,14,13,12
+      add(16, -(jd+an)*fw*0.02, -an*fh*0.02, 45);
+      add(15, -jw*fw*0.025, -jd*fh*0.015, 40);
+      add(14, -jw*fw*0.02, -jd*fh*0.01, 38);
+      add(13, -jw*fw*0.01, 0, 35);
+      add(12, -jw*fw*0.005, 0, 30);
+      return { points, disps, sigmas };
+    }
+  },
 };
 
-function exportImage() {
-  const link = document.createElement('a');
-  link.download = 'simplast-simulacion.png';
-  link.href = mainCanvas.toDataURL('image/png');
-  link.click();
+// ═══════════════════════════════════════════
+// WEBGL ENGINE
+// ═══════════════════════════════════════════
+const VS = `
+attribute vec2 aPos;
+attribute vec2 aUV;
+varying vec2 vUV;
+void main(){
+  gl_Position = vec4(aPos,0.,1.);
+  vUV = aUV;
+}`;
+
+const FS = `
+precision highp float;
+uniform sampler2D uTex;
+uniform int uN;
+uniform vec2 uPts[32];
+uniform vec2 uDisps[32];
+uniform float uSigs[32];
+uniform float uStr;
+varying vec2 vUV;
+void main(){
+  vec2 uv = vUV;
+  vec2 td = vec2(0.);
+  float tw = 0.001;
+  for(int i=0;i<32;i++){
+    if(i>=uN) break;
+    vec2 d = uv - uPts[i];
+    float d2 = dot(d,d);
+    float s = uSigs[i];
+    float w = exp(-d2/(2.*s*s));
+    td += w * uDisps[i];
+    tw += w;
+  }
+  vec2 suv = uv - (td/tw)*uStr;
+  suv = clamp(suv,0.001,0.999);
+  gl_FragColor = texture2D(uTex, suv);
+}`;
+
+function initWebGL() {
+  const canvas = document.getElementById('glCanvas');
+  const gl = canvas.getContext('webgl', {preserveDrawingBuffer:true});
+  if (!gl) return null;
+  const vs = compileShader(gl, VS, gl.VERTEX_SHADER);
+  const fs = compileShader(gl, FS, gl.FRAGMENT_SHADER);
+  if (!vs || !fs) return null;
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(prog)); return null; }
+  // Quad
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1,-1, 0,1,  1,-1, 1,1,
+    -1, 1, 0,0,  1, 1, 1,0,
+  ]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  const aUV = gl.getAttribLocation(prog, 'aUV');
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(aUV); gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 16, 8);
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  state.gl = gl; state.program = prog; state.texture = tex;
+  return gl;
 }
 
-// ════════════════════════════════════════════════════════════════
-// MODEL LOADING
-// ════════════════════════════════════════════════════════════════
+function compileShader(gl, src, type) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; }
+  return s;
+}
 
+function uploadTexture(img) {
+  const gl = state.gl;
+  gl.bindTexture(gl.TEXTURE_2D, state.texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+}
+
+function renderWarp(pts, disps, sigmas, strength) {
+  const gl = state.gl;
+  const prog = state.program;
+  const canvas = document.getElementById('glCanvas');
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(prog);
+  // Upload uniforms
+  const n = Math.min(pts.length, 32);
+  gl.uniform1i(gl.getUniformLocation(prog,'uN'), n);
+  gl.uniform1f(gl.getUniformLocation(prog,'uStr'), strength);
+  // Flatten arrays
+  const pFlat = new Float32Array(64); const dFlat = new Float32Array(64); const sFlat = new Float32Array(32);
+  for(let i=0;i<n;i++){
+    pFlat[i*2]=pts[i][0]; pFlat[i*2+1]=pts[i][1];
+    dFlat[i*2]=disps[i][0]; dFlat[i*2+1]=disps[i][1];
+    sFlat[i]=sigmas[i];
+  }
+  gl.uniform2fv(gl.getUniformLocation(prog,'uPts'), pFlat);
+  gl.uniform2fv(gl.getUniformLocation(prog,'uDisps'), dFlat);
+  gl.uniform1fv(gl.getUniformLocation(prog,'uSigs'), sFlat);
+  gl.uniform1i(gl.getUniformLocation(prog,'uTex'), 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, state.texture);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ═══════════════════════════════════════════
+// FACE API
+// ═══════════════════════════════════════════
 async function loadModels() {
-  setStatus('loading', 'Cargando modelos de detección facial...');
+  const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
   try {
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
     ]);
     state.modelsLoaded = true;
-    setStatus('success', 'Listo · Sube una foto del paciente para comenzar');
-    setTimeout(() => { statusBar.style.display = 'none'; }, 4000);
-  } catch (e) {
-    console.error(e);
-    setStatus('error', 'Error cargando modelos. Sirve desde servidor local: python -m http.server');
+  } catch(e) {
+    console.warn('Face models failed to load:', e);
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// CAMERA
-// ════════════════════════════════════════════════════════════════
-
-const camModal    = $('camModal');
-const camVideo    = $('camVideo');
-const camOverlay  = $('camOverlayMsg');
-const camErrorEl  = $('camError');
-const camFlash    = $('camFlash');
-const camCapBtn   = $('camCaptureBtn');
-
-let camStream = null;
-let facingMode = 'user'; // 'user' = front, 'environment' = back
-
-async function openCamera() {
-  camModal.classList.add('open');
-  camErrorEl.classList.remove('visible');
-  camOverlay.style.display = 'flex';
-  camCapBtn.disabled = true;
-  await startStream();
+async function detectFace(imgEl) {
+  if (!state.modelsLoaded) return null;
+  try {
+    setFaceStatus('detecting');
+    const opts = new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.3});
+    const det = await faceapi.detectSingleFace(imgEl, opts).withFaceLandmarks(true);
+    if (det) {
+      setFaceStatus('detected');
+      return det;
+    } else {
+      setFaceStatus('not-detected');
+      return null;
+    }
+  } catch(e) {
+    setFaceStatus('not-detected');
+    return null;
+  }
 }
 
-async function startStream() {
-  // Stop any existing stream
-  if (camStream) camStream.getTracks().forEach(t => t.stop());
+function setFaceStatus(s) {
+  const el = document.getElementById('faceStatus');
+  const txt = document.getElementById('faceStatusText');
+  el.style.display = 'flex';
+  el.className = 'face-status ' + s;
+  txt.textContent = s === 'detected' ? 'Rostro detectado' : s === 'not-detected' ? 'Sin detección' : 'Detectando...';
+}
 
-  const constraints = {
-    video: {
-      facingMode,
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-    },
-    audio: false,
-  };
+// ═══════════════════════════════════════════
+// IMAGE HANDLING
+// ═══════════════════════════════════════════
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = src;
+  });
+}
 
-  try {
-    camStream = await navigator.mediaDevices.getUserMedia(constraints);
-    camVideo.srcObject = camStream;
-    // Mirror only for front camera
-    camVideo.classList.toggle('no-mirror', facingMode === 'environment');
-    camVideo.onloadedmetadata = () => {
-      camOverlay.style.display = 'none';
-      camCapBtn.disabled = false;
+async function processImage(src) {
+  document.getElementById('statusBadge').textContent = 'Procesando...';
+  const img = await loadImage(src);
+  state.originalImage = img;
+  // Determine display size
+  const maxW = document.getElementById('canvasWrap').clientWidth - 32;
+  const maxH = window.innerHeight - 220;
+  const scale = Math.min(maxW/img.width, maxH/img.height, 1);
+  const dw = Math.round(img.width * scale);
+  const dh = Math.round(img.height * scale);
+  state.imageW = dw; state.imageH = dh;
+  // Setup canvases
+  const glC = document.getElementById('glCanvas');
+  glC.width = dw; glC.height = dh;
+  const beforeC = document.getElementById('canvasBefore');
+  beforeC.width = dw; beforeC.height = dh;
+  const afterC = document.getElementById('canvasAfter');
+  afterC.width = dw; afterC.height = dh;
+  const lmC = document.getElementById('landmarkCanvas');
+  lmC.width = dw; lmC.height = dh;
+  // Size container
+  const cont = document.getElementById('canvasContainer');
+  cont.style.width = dw + 'px';
+  cont.style.height = dh + 'px';
+  // Draw original to before canvas
+  const beforeCtx = beforeC.getContext('2d');
+  beforeCtx.drawImage(img, 0, 0, dw, dh);
+  // Upload to WebGL
+  if (!state.gl) initWebGL();
+  document.getElementById('glCanvas').width = dw;
+  document.getElementById('glCanvas').height = dh;
+  uploadTexture(beforeC);
+  // Show container
+  document.getElementById('emptyState').style.display = 'none';
+  cont.style.display = 'block';
+  cont.classList.add('fade-in');
+  // Also copy to after canvas initially
+  const afterCtx = afterC.getContext('2d');
+  afterCtx.drawImage(img, 0, 0, dw, dh);
+  // Face detection
+  const det = await detectFace(beforeC);
+  if (det) {
+    const scaleX = dw / img.width;
+    const scaleY = dh / img.height;
+    // Scale landmarks
+    state.landmarks = det.landmarks.positions.map(p => ({
+      x: p.x * scaleX, y: p.y * scaleY
+    }));
+    state.faceBox = {
+      x: det.detection.box.x * scaleX,
+      y: det.detection.box.y * scaleY,
+      w: det.detection.box.width * scaleX,
+      h: det.detection.box.height * scaleY,
     };
-  } catch (err) {
-    console.error('Camera error:', err);
-    camOverlay.style.display = 'none';
-    camErrorEl.classList.add('visible');
+    drawLandmarks();
+  } else {
+    state.landmarks = null;
+    state.faceBox = null;
+    showToast('⚠️ No se detectó un rostro. El efecto se aplicará automáticamente. Usa foto frontal para mejores resultados.');
+  }
+  // Apply effect
+  applyEffect();
+  document.getElementById('statusBadge').textContent = 'Listo';
+}
+
+function drawLandmarks() {
+  const lmC = document.getElementById('landmarkCanvas');
+  const ctx = lmC.getContext('2d');
+  ctx.clearRect(0, 0, lmC.width, lmC.height);
+  if (!state.landmarks) return;
+  ctx.fillStyle = 'rgba(108,99,255,0.7)';
+  state.landmarks.forEach((p,i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+// ═══════════════════════════════════════════
+// EFFECT ENGINE
+// ═══════════════════════════════════════════
+function applyEffect() {
+  if (!state.originalImage) return;
+  const proc = PROCEDURES[state.currentProc];
+  const vals = state.sliderValues;
+  const dw = state.imageW, dh = state.imageH;
+  let warpData;
+  if (state.landmarks && state.faceBox) {
+    warpData = proc.getWarpData(state.landmarks, dw, dh, vals);
+  } else {
+    // Fallback: estimate face center
+    const cx = dw * 0.5, cy = dh * 0.45;
+    const fakeLm = generateFakeLandmarks(cx, cy, dw, dh);
+    warpData = proc.getWarpData(fakeLm, dw, dh, vals);
+  }
+  // Render with WebGL
+  renderWarp(warpData.points, warpData.disps, warpData.sigmas, 1.0);
+  // Copy result to after canvas
+  const afterCtx = document.getElementById('canvasAfter').getContext('2d');
+  afterCtx.clearRect(0, 0, dw, dh);
+  afterCtx.drawImage(document.getElementById('glCanvas'), 0, 0);
+  updateSplitView();
+}
+
+function generateFakeLandmarks(cx, cy, fw, fh) {
+  // Generate anatomically plausible landmark estimates from face center
+  const lm = new Array(68).fill(null).map(() => ({x:cx, y:cy}));
+  const fw2 = fw * 0.22;
+  const fh2 = fh * 0.28;
+  // Jaw line: 0-16
+  for(let i=0;i<=16;i++){
+    const t = (i/16)*Math.PI;
+    lm[i] = {x: cx + Math.sin(t-(Math.PI/2+0.1))*(fw2*1.05), y: cy + Math.cos(t-(Math.PI/2+0.1))*fh2*0.6 + fh2*0.7};
+  }
+  // Right brow: 17-21
+  for(let i=0;i<5;i++) lm[17+i] = {x:cx-fw2+i*fw2*0.4, y:cy-fh2*0.3};
+  // Left brow: 22-26
+  for(let i=0;i<5;i++) lm[22+i] = {x:cx+fw2*0.2+i*fw2*0.4, y:cy-fh2*0.3};
+  // Nose: 27-35
+  lm[27]={x:cx,y:cy-fh2*0.1}; lm[28]={x:cx,y:cy}; lm[29]={x:cx,y:cy+fh2*0.1}; lm[30]={x:cx,y:cy+fh2*0.2};
+  lm[31]={x:cx-fw2*0.35,y:cy+fh2*0.25}; lm[32]={x:cx-fw2*0.15,y:cy+fh2*0.3};
+  lm[33]={x:cx,y:cy+fh2*0.32}; lm[34]={x:cx+fw2*0.15,y:cy+fh2*0.3}; lm[35]={x:cx+fw2*0.35,y:cy+fh2*0.25};
+  // Right eye: 36-41
+  for(let i=0;i<6;i++) lm[36+i] = {x:cx-fw2*0.7+i*fw2*0.22, y:cy-fh2*0.15+(i<3?-i*fw2*0.05:-(5-i)*fw2*0.05)};
+  // Left eye: 42-47
+  for(let i=0;i<6;i++) lm[42+i] = {x:cx+fw2*0.25+i*fw2*0.22, y:cy-fh2*0.15+(i<3?-i*fw2*0.05:-(5-i)*fw2*0.05)};
+  // Lips: 48-67
+  lm[48]={x:cx-fw2*0.38,y:cy+fh2*0.55}; lm[49]={x:cx-fw2*0.22,y:cy+fh2*0.5};
+  lm[50]={x:cx-fw2*0.1,y:cy+fh2*0.48}; lm[51]={x:cx,y:cy+fh2*0.47};
+  lm[52]={x:cx+fw2*0.1,y:cy+fh2*0.48}; lm[53]={x:cx+fw2*0.22,y:cy+fh2*0.5};
+  lm[54]={x:cx+fw2*0.38,y:cy+fh2*0.55}; lm[55]={x:cx+fw2*0.22,y:cy+fh2*0.63};
+  lm[56]={x:cx+fw2*0.1,y:cy+fh2*0.67}; lm[57]={x:cx,y:cy+fh2*0.69};
+  lm[58]={x:cx-fw2*0.1,y:cy+fh2*0.67}; lm[59]={x:cx-fw2*0.22,y:cy+fh2*0.63};
+  // Inner lip 60-67
+  lm[60]={x:cx-fw2*0.3,y:cy+fh2*0.56}; lm[61]={x:cx-fw2*0.12,y:cy+fh2*0.54};
+  lm[62]={x:cx,y:cy+fh2*0.53}; lm[63]={x:cx+fw2*0.12,y:cy+fh2*0.54};
+  lm[64]={x:cx+fw2*0.3,y:cy+fh2*0.56}; lm[65]={x:cx+fw2*0.12,y:cy+fh2*0.62};
+  lm[66]={x:cx,y:cy+fh2*0.65}; lm[67]={x:cx-fw2*0.12,y:cy+fh2*0.62};
+  // Chin 8
+  lm[8]={x:cx,y:cy+fh2*1.0};
+  return lm;
+}
+
+function resetEffect() {
+  buildSliders();
+  applyEffect();
+}
+
+// ═══════════════════════════════════════════
+// SPLIT VIEW
+// ═══════════════════════════════════════════
+function updateSplitView() {
+  const cont = document.getElementById('canvasContainer');
+  const after = document.getElementById('canvasAfter');
+  const sl = document.getElementById('splitLine');
+  const w = state.imageW;
+  const h = state.imageH;
+  if (state.viewMode === 'split') {
+    const x = Math.floor(state.splitX * w);
+    after.style.clipPath = `inset(0 0 0 ${x}px)`;
+    sl.style.display = 'block';
+    sl.style.left = x + 'px';
+    document.getElementById('labelBefore').style.display = 'block';
+    document.getElementById('labelAfter').style.display = 'block';
+  } else if (state.viewMode === 'after') {
+    after.style.clipPath = 'none';
+    sl.style.display = 'none';
+    document.getElementById('labelBefore').style.display = 'none';
+    document.getElementById('labelAfter').style.display = 'none';
+  } else {
+    after.style.clipPath = 'inset(0 0 0 100%)';
+    sl.style.display = 'none';
+    document.getElementById('labelBefore').style.display = 'none';
+    document.getElementById('labelAfter').style.display = 'none';
+  }
+}
+
+function setView(mode) {
+  state.viewMode = mode;
+  ['split','after','before'].forEach(v => {
+    document.getElementById('tab'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('active', v === mode);
+  });
+  updateSplitView();
+}
+
+// Split dragging
+let splitDragging = false;
+document.getElementById('canvasContainer').addEventListener('mousedown', startSplitDrag);
+document.getElementById('canvasContainer').addEventListener('touchstart', startSplitDrag, {passive:true});
+document.addEventListener('mousemove', moveSplitDrag);
+document.addEventListener('touchmove', moveSplitDrag, {passive:true});
+document.addEventListener('mouseup', () => splitDragging = false);
+document.addEventListener('touchend', () => splitDragging = false);
+
+function startSplitDrag(e) {
+  if (state.viewMode !== 'split') return;
+  splitDragging = true;
+  moveSplitDrag(e);
+}
+function moveSplitDrag(e) {
+  if (!splitDragging || state.viewMode !== 'split') return;
+  const cont = document.getElementById('canvasContainer');
+  const rect = cont.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  state.splitX = x;
+  updateSplitView();
+}
+
+// ═══════════════════════════════════════════
+// UI CONTROLS
+// ═══════════════════════════════════════════
+function selectProcedure(proc) {
+  state.currentProc = proc;
+  document.querySelectorAll('.proc-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-proc="${proc}"]`).classList.add('active');
+  buildSliders();
+  if (state.originalImage) applyEffect();
+}
+
+function buildSliders() {
+  const proc = PROCEDURES[state.currentProc];
+  const group = document.getElementById('sliderGroup');
+  state.sliderValues = {};
+  group.innerHTML = '';
+  proc.sliders.forEach(sl => {
+    state.sliderValues[sl.id] = sl.def;
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+    const val = sl.def;
+    row.innerHTML = `
+      <div class="slider-label">
+        <span>${sl.label}</span>
+        <span class="slider-val" id="val_${sl.id}">${val}</span>
+      </div>
+      <input type="range" min="${sl.min}" max="${sl.max}" value="${val}" id="sl_${sl.id}">
+    `;
+    group.appendChild(row);
+    const input = row.querySelector('input');
+    input.addEventListener('input', () => {
+      state.sliderValues[sl.id] = +input.value;
+      document.getElementById('val_'+sl.id).textContent = input.value;
+      if (state.originalImage) applyEffect();
+    });
+  });
+}
+
+// Procedure buttons
+document.querySelectorAll('.proc-btn').forEach(btn => {
+  btn.addEventListener('click', () => selectProcedure(btn.dataset.proc));
+});
+
+// ═══════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) {
+    const url = URL.createObjectURL(file);
+    processImage(url);
+  }
+  e.target.value = '';
+});
+
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    processImage(URL.createObjectURL(file));
+  }
+});
+
+// ═══════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════
+async function openCamera() {
+  const overlay = document.getElementById('cameraOverlay');
+  overlay.classList.add('active');
+  try {
+    state.cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: state.facingMode, width:{ideal:1280}, height:{ideal:720} }
+    });
+    document.getElementById('videoEl').srcObject = state.cameraStream;
+  } catch(e) {
+    overlay.classList.remove('active');
+    showToast('❌ No se pudo acceder a la cámara: ' + e.message);
   }
 }
 
 function closeCamera() {
-  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-  camModal.classList.remove('open');
-  camVideo.srcObject = null;
-}
-
-async function flipCamera() {
-  facingMode = facingMode === 'user' ? 'environment' : 'user';
-  camOverlay.style.display = 'flex';
-  camCapBtn.disabled = true;
-  await startStream();
+  if (state.cameraStream) {
+    state.cameraStream.getTracks().forEach(t => t.stop());
+    state.cameraStream = null;
+  }
+  document.getElementById('cameraOverlay').classList.remove('active');
 }
 
 function capturePhoto() {
-  if (!camStream) return;
-
-  // Flash effect
-  camFlash.classList.remove('go');
-  void camFlash.offsetWidth; // reflow
-  camFlash.classList.add('go');
-
-  // Draw current video frame to offscreen canvas
-  const vw = camVideo.videoWidth;
-  const vh = camVideo.videoHeight;
-  const snap = document.createElement('canvas');
-  snap.width = vw;
-  snap.height = vh;
-  const sCtx = snap.getContext('2d');
-
-  // Mirror front camera to match natural orientation
-  if (facingMode === 'user') {
-    sCtx.translate(vw, 0);
-    sCtx.scale(-1, 1);
-  }
-  sCtx.drawImage(camVideo, 0, 0, vw, vh);
-
-  // Convert to image and process
-  const img = new Image();
-  img.onload = () => {
-    closeCamera();
-    processImage(img);
-  };
-  img.src = snap.toDataURL('image/jpeg', 0.92);
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('camCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const url = canvas.toDataURL('image/jpeg', 0.95);
+  closeCamera();
+  processImage(url);
 }
 
-// Close modal on backdrop click
-camModal.addEventListener('click', e => { if (e.target === camModal) closeCamera(); });
+function flipCamera() {
+  state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+  if (state.cameraStream) {
+    state.cameraStream.getTracks().forEach(t => t.stop());
+  }
+  openCamera();
+}
 
-// Close on Escape
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && camModal.classList.contains('open')) closeCamera(); });
+// ═══════════════════════════════════════════
+// DOWNLOAD
+// ═══════════════════════════════════════════
+function downloadResult() {
+  if (!state.originalImage) { showToast('Primero carga una imagen'); return; }
+  // Create composite
+  const tmp = document.createElement('canvas');
+  tmp.width = state.imageW * 2 + 20;
+  tmp.height = state.imageH + 60;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#0e1420';
+  ctx.fillRect(0,0,tmp.width,tmp.height);
+  // Before
+  ctx.drawImage(document.getElementById('canvasBefore'), 0, 30);
+  // After
+  ctx.drawImage(document.getElementById('canvasAfter'), state.imageW + 20, 30);
+  // Labels
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = 'bold 16px system-ui'; ctx.textAlign='center';
+  ctx.fillText('ANTES', state.imageW/2, 20);
+  ctx.fillStyle = 'rgba(108,99,255,0.9)';
+  ctx.fillText('DESPUÉS', state.imageW + 20 + state.imageW/2, 20);
+  // Watermark
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '12px system-ui'; ctx.textAlign='right';
+  ctx.fillText('AestheSim · Simulador de Cirugía Estética', tmp.width - 8, tmp.height - 8);
+  const a = document.createElement('a');
+  a.download = 'aesthetsim_resultado.jpg';
+  a.href = tmp.toDataURL('image/jpeg', 0.95);
+  a.click();
+  showToast('✅ Imagen descargada');
+}
 
-// ════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ═══════════════════════════════════════════
 // INIT
-// ════════════════════════════════════════════════════════════════
-
-buildUI();
-loadModels();
+// ═══════════════════════════════════════════
+(async () => {
+  buildSliders();
+  initWebGL();
+  try {
+    await loadModels();
+  } catch(e) {}
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('statusBadge').textContent = 'Modelos listos';
+})();
 </script>
 </body>
 </html>
