@@ -927,18 +927,16 @@ uniform float uStr;
 varying vec2 vUV;
 void main(){
   vec2 uv = vUV;
-  vec2 td = vec2(0.);
-  float tw = 0.001;
+  vec2 disp = vec2(0.);
   for(int i=0;i<64;i++){
     float act = step(float(i)+0.5, float(uN));
     vec2 d = uv - uPts[i];
     float d2 = dot(d,d);
     float s = max(uSigs[i], 0.00001);
     float w = act * exp(-d2/(2.*s*s));
-    td += w * uDisps[i];
-    tw += w;
+    disp += w * uDisps[i];
   }
-  vec2 suv = uv - (td/tw)*uStr;
+  vec2 suv = uv - disp * uStr;
   suv = clamp(suv,0.001,0.999);
   gl_FragColor = texture2D(uTex, suv);
 }`;
@@ -1348,16 +1346,15 @@ function applyEffect() {
 
 // Compute forward displacement at a UV point from the warp field
 function warpFieldAt(u, v, pts, disps, sigmas) {
-  let tdx = 0, tdy = 0, tw = 0.001;
+  let dx = 0, dy = 0;
   for (let i = 0; i < pts.length; i++) {
     const du = u - pts[i][0], dv = v - pts[i][1];
     const s = Math.max(sigmas[i], 0.00001);
     const w = Math.exp(-(du*du + dv*dv) / (2*s*s));
-    tdx += w * disps[i][0];
-    tdy += w * disps[i][1];
-    tw += w;
+    dx += w * disps[i][0];
+    dy += w * disps[i][1];
   }
-  return [tdx/tw, tdy/tw];
+  return [dx, dy];
 }
 
 // Draw projected landmark positions after applying the combined warp
@@ -1373,7 +1370,7 @@ function drawProjectedLandmarks(pts, disps, sigmas, strength, fw, fh) {
     const px = p.x + du * strength * fw;
     const py = p.y + dv * strength * fh;
     const moved = Math.hypot(px - p.x, py - p.y);
-    if (moved < 0.8) return;
+    if (moved < 1.5) return;
 
     ctx.save();
     // Arrow from original to projected
